@@ -1,0 +1,12 @@
+# TODO(release): when ASOFT AI Services is on PyPI, drop this whole block and use
+# Dockerfile.install_pypi.template instead. Copying the source tree is a
+# transitional dev-only path so the in-container gateway can `import ASOFT`.
+COPY asoft_ai_services_src /tmp/asoft_ai_services_src
+# ``--no-deps``: the gateway only imports ``ASOFT AI Services.mcp.MCPClient``,
+# whose transitive needs (mcp, pydantic, httpx, fastapi) are already
+# installed via requirements.txt above. Skipping ASOFT AI Services's full
+# dependency tree avoids dragging in heavy/Rust-built packages
+# (ripgrep, tree_sitter, opentelemetry, anthropic/openai SDKs, …)
+# which would otherwise require a C/Rust toolchain in the slim image.
+RUN uv pip install --no-deps /tmp/asoft_ai_services_src \
+ && rm -rf /tmp/asoft_ai_services_src

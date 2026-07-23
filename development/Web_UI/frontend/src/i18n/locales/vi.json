@@ -1,0 +1,400 @@
+{
+	"common": {
+		"add": "Thêm",
+		"agent": "Tác nhân",
+		"cancel": "Hủy",
+		"chat": "Trò chuyện",
+		"close": "Đóng",
+		"confirm": "Xác nhận",
+		"create": "Tạo",
+		"creating": "Đang tạo…",
+		"credential": "Thông tin xác thực",
+		"date": "Ngày",
+		"delete": "Xóa",
+		"deleting": "Đang xóa…",
+		"disabled": "Đã tắt",
+		"edit": "Chỉnh sửa",
+		"error": "Đã xảy ra lỗi",
+		"information": "Thông tin",
+		"interrupted": "Đã gián đoạn",
+		"loading": "Đang tải...",
+		"model": "Mô hình",
+		"name": "Tên",
+		"no": "Không",
+		"noData": "Không có dữ liệu",
+		"completed": "Hoàn thành",
+		"failed": "Thất bại",
+		"running": "Đang chạy",
+		"save": "Lưu",
+		"saving": "Đang lưu…",
+		"schedule": "Lịch chạy",
+		"selectAgent": "Chọn tác nhân",
+		"settings": "Cài đặt",
+		"language": "Ngôn ngữ",
+		"vietnamese": "Tiếng Việt",
+		"english": "English",
+		"chinese": "中文",
+		"switchToZh": "Chuyển sang tiếng Trung",
+		"switchToEn": "Chuyển sang tiếng Anh",
+		"success": "Thành công",
+		"team": "Nhóm",
+		"leader": "Trưởng nhóm",
+		"worker": "Thành viên",
+		"time": "Thời gian",
+		"yes": "Có",
+		"deleteTitle": "Xóa {{entity}} \"{{name}}\"?",
+		"deleteDescription": "Không thể hoàn tác thao tác này."
+	},
+	"error": {
+		"description": "Trang gặp lỗi không mong muốn. Bạn có thể thử lại hoặc về trang chính.",
+		"retry": "Thử lại",
+		"home": "Về trang chính"
+	},
+	"tool": {
+		"moreLines": "... thêm {{count}} dòng",
+		"read": {
+			"name": "Đọc",
+			"fileCount_one": "{{count}} tệp",
+			"fileCount_other": "{{count}} tệp",
+			"lineCount_one": "Đã đọc {{formatted}} dòng",
+			"lineCount_other": "Đã đọc {{formatted}} dòng"
+		},
+		"glob": { "name": "Tìm tệp" },
+		"taskCreate": {
+			"name": "Tạo tác vụ",
+			"label": "Tạo",
+			"count_one": "{{count}} tác vụ",
+			"count_other": "{{count}} tác vụ"
+		},
+		"grep": { "name": "Tìm nội dung" }
+	},
+	"textInput": {
+		"toComplete": "để hoàn tất",
+		"newLine": "xuống dòng",
+		"attach": "Đính kèm tệp",
+		"attachNotSupported": "Mô hình này không hỗ trợ tệp đính kèm",
+		"send": "Gửi"
+	},
+	"confirmCard": {
+		"toConfirm": "để xác nhận",
+		"yesWithRule": "Có, và cho phép {{toolName}} thực thi {{ruleContent}} trong phiên này"
+	},
+	"messageBubble": {
+		"thinking": "Đang suy nghĩ",
+		"audioGenerating": "Đang tạo âm thanh…",
+		"playAudio": "Phát âm thanh",
+		"pauseAudio": "Tạm dừng âm thanh",
+		"running": "Đang chạy...",
+		"hintSource": {
+			"tool_output": "Kết quả công cụ",
+			"team_message": "Tin nhắn nhóm",
+			"schedule": "Lịch chạy"
+		}
+	},
+	"chat": {
+		"inputPlaceholder": "Nhập tin nhắn...",
+		"placeholder": "Nhập tin nhắn...",
+		"send": "Gửi",
+		"confirmToolCall": "Cho phép thao tác này?",
+		"subagentConfirmTitle": "{{name}} yêu cầu xác nhận",
+		"newSession": "Phiên mới",
+		"noSessions": "Chưa có phiên",
+		"noMessages": "Chưa có tin nhắn",
+		"noMessagesDesc": "Gửi tin nhắn để bắt đầu cuộc trò chuyện",
+		"agent": {
+			"selectPlaceholder": "Chọn tác nhân",
+			"emptyTitle": "Chưa có tác nhân",
+			"emptyDescription": "Hãy tạo tác nhân để bắt đầu."
+		},
+		"session": {
+			"label": "Phiên",
+			"emptyTitle": "Chưa có phiên",
+			"emptyNoAgent": "Hãy chọn tác nhân trước.",
+			"emptyHasAgent": "Tạo phiên để bắt đầu trò chuyện."
+		}
+	},
+	"dialog-agent-create": {
+		"title": "Tạo tác nhân",
+		"description": "Thiết lập danh tính và hành vi cho tác nhân mới.",
+		"trigger": "Tạo tác nhân"
+	},
+	"agent-form": {
+		"identity": {
+			"legend": "Danh tính tác nhân",
+			"description": "Tên và chỉ dẫn xác định hành vi của tác nhân.",
+			"name": { "label": "Tên", "placeholder": "Tác nhân của tôi" },
+			"system-prompt": { "label": "Chỉ dẫn hệ thống" }
+		},
+		"context-config": {
+			"legend": "Cấu hình ngữ cảnh",
+			"description": "Điều khiển cách quản lý và nén cửa sổ ngữ cảnh.",
+			"trigger-ratio": { "label": "Tỷ lệ kích hoạt" },
+			"reserve-ratio": { "label": "Tỷ lệ dự phòng" },
+			"tool-result-limit": { "label": "Giới hạn kết quả công cụ" },
+			"compression-prompt": { "label": "Chỉ dẫn nén" },
+			"summary-template": { "label": "Mẫu tóm tắt" }
+		},
+		"react-config": {
+			"legend": "Cấu hình suy luận và hành động",
+			"description": "Điều khiển vòng lặp suy luận và hành động.",
+			"max-iters": { "label": "Số vòng lặp tối đa" },
+			"stop-on-reject": { "label": "Dừng khi bị từ chối" }
+		}
+	},
+	"dialog-agent-edit": {
+		"title": "Chỉnh sửa tác nhân",
+		"description": "Cập nhật cấu hình tác nhân."
+	},
+	"dialog-agent-delete": {
+		"entity": "tác nhân",
+		"confirm": "Xóa"
+	},
+	"dialog-session-delete": {
+		"entity": "phiên",
+		"confirm": "Xóa"
+	},
+	"dialog-session-rename": {
+		"title": "Đổi tên phiên",
+		"description": "Đặt tên mới cho phiên này.",
+		"label": "Tên",
+		"placeholder": "Tên phiên"
+	},
+	"session-menu": {
+		"rename": "Đổi tên",
+		"delete": "Xóa"
+	},
+	"dialog-credential-create": {
+		"title": "Thêm thông tin xác thực",
+		"description": "Thêm thông tin xác thực cho nhà cung cấp mô hình.",
+		"selectType": "Nhà cung cấp",
+		"selectTypePlaceholder": "Chọn nhà cung cấp"
+	},
+	"dialog-credential-edit": {
+		"title": "Chỉnh sửa thông tin xác thực",
+		"description": "Cập nhật thông tin xác thực đã lưu."
+	},
+	"credential": {
+		"noProviders": "Không có nhà cung cấp",
+		"noConfigs": "Không có cấu hình",
+		"selectHint": "Chưa chọn thông tin xác thực",
+		"selectHintDescription": "Chọn một mục bên trái để xem chi tiết.",
+		"availableModels": "Mô hình khả dụng",
+		"noModels": "Không có mô hình",
+		"noModelsDescription": "Nhà cung cấp này không trả về mô hình nào.",
+		"deleteEntity": "thông tin xác thực",
+		"subtitle": "Cấu hình thông tin xác thực API mô hình",
+		"configured": "Đã cấu hình",
+		"addProvider": "Thêm thông tin xác thực",
+		"reasoning": "Suy luận",
+		"maxContext": "Ngữ cảnh tối đa",
+		"maxOutput": "Đầu ra tối đa",
+		"inputTypes": "Đầu vào",
+		"outputTypes": "Đầu ra",
+		"availableTTSModels": "Mô hình giọng nói"
+	},
+	"llm-select": {
+		"placeholder": "Chọn mô hình",
+		"fallbackPlaceholder": "Mô hình dự phòng",
+		"loading": "Đang tải…",
+		"empty": {
+			"title": "Không có mô hình",
+			"description": "Thêm thông tin xác thực để bắt đầu.",
+			"addButton": "Thêm thông tin xác thực"
+		},
+		"addCredential": "Thêm thông tin xác thực",
+		"clear": "Bỏ lựa chọn",
+		"noFallback": "Không có mô hình dự phòng"
+	},
+	"permission-mode": {
+		"placeholder": "Chọn chế độ quyền",
+		"trigger-tooltip": "Chế độ quyền",
+		"label": "Chế độ quyền",
+		"default-tooltip": "Mặc định: mọi thao tác đều cần xác nhận",
+		"accept_edits-tooltip": "Tự động cho phép đọc/ghi trong thư mục làm việc; các thao tác khác áp dụng quy tắc bình thường",
+		"explore-tooltip": "Chỉ đọc: cho phép đọc, tìm kiếm; từ chối sửa đổi",
+		"bypass-tooltip": "Tự động cho phép mọi thao tác; chỉ dùng trong môi trường tin cậy",
+		"dont_ask-tooltip": "Chuyển mọi yêu cầu xác nhận thành từ chối; phù hợp tác vụ nền"
+	},
+	"dialog-mcp-create": {
+		"title": "Thêm máy chủ MCP",
+		"description": "Thêm máy chủ MCP bằng cấu hình.",
+		"configLabel": "Cấu hình MCP",
+		"keepAlive": "Duy trì kết nối",
+		"keepAliveDesc": "Duy trì trạng thái giữa các lượt tương tác.",
+		"adding": "Đang thêm…",
+		"added": "Đã thêm",
+		"parseError": "Cấu hình JSON không hợp lệ: {{message}}",
+		"missingMcpServers": "Cấu hình phải chứa đối tượng \"mcpServers\".",
+		"emptyMcpServers": "Không tìm thấy máy chủ MCP trong cấu hình."
+	},
+	"dialog-mcp-delete": {
+		"entity": "máy chủ MCP",
+		"skillEntity": "kỹ năng",
+		"skillDescription": "Bạn có chắc muốn xóa kỹ năng này khỏi không gian làm việc?"
+	},
+	"dialog-skill-add": {
+		"title": "Thêm kỹ năng",
+		"description": "Nhập đường dẫn thư mục kỹ năng cần thêm.",
+		"pathLabel": "Đường dẫn kỹ năng",
+		"pathPlaceholder": "/duong/dan/den/ky-nang"
+	},
+	"schedule": {
+		"calendar": "Lịch",
+		"list": "Danh sách",
+		"createSchedule": {
+			"title": "Tạo lịch chạy",
+			"description": "Thiết lập tác vụ định kỳ hoặc chạy một lần cho tác nhân.",
+			"descriptionLabel": "Mô tả",
+			"descriptionPlaceholder": "Mô tả công việc cần thực hiện...",
+			"namePlaceholder": "Ví dụ: Báo cáo hằng ngày"
+		},
+		"deleteSchedule": {
+			"entity": "lịch chạy",
+			"successToast": "Đã xóa lịch chạy."
+		},
+		"endAt": "Ngày kết thúc",
+		"end_at": "Kết thúc lúc",
+		"friday": "T6",
+		"monday": "T2",
+		"more": "thêm",
+		"nextMonth": "Tháng sau",
+		"nextYear": "Năm sau",
+		"pickDate": "Chọn ngày",
+		"permissionMode": "Chế độ quyền",
+		"createdAt": "Thời điểm tạo",
+		"dayOfMonthSuffix": "",
+		"stateful": "Duy trì trạng thái",
+		"statefulDesc": "Dùng lại một phiên giữa các lần chạy để tích lũy ngữ cảnh.",
+		"previousMonth": "Tháng trước",
+		"previousYear": "Năm trước",
+		"saturday": "T7",
+		"startAt": "Bắt đầu lúc",
+		"sunday": "CN",
+		"thursday": "T5",
+		"tuesday": "T3",
+		"wednesday": "T4",
+		"noSchedules": "Chưa có lịch chạy",
+		"noSchedulesDescription": "Tạo lịch để tự động hóa tác vụ AI.",
+		"noExecutions": "Chưa có lần thực thi",
+		"noExecutionsDescription": "Lịch này chưa được thực thi.",
+		"today": "Hôm nay",
+		"frequency": "Tần suất",
+		"freqOnce": "Một lần",
+		"freqDaily": "Hằng ngày",
+		"freqWeekly": "Hằng tuần",
+		"freqMonthly": "Hằng tháng",
+		"timezone": "Múi giờ",
+		"triggerTime": "Thời điểm chạy",
+		"executionHistory": "Lịch sử thực thi"
+	},
+	"model-parameters": {
+		"title": "Tham số mô hình",
+		"description": "Điều chỉnh tham số suy luận của mô hình.",
+		"empty": "Không có tham số có thể cấu hình.",
+		"fallbackLabel": "Mô hình dự phòng",
+		"fallbackLabelWithModel": "Mô hình dự phòng ({{model}})",
+		"parametersLabel": "Tham số",
+		"ttsLabel": "Giọng nói",
+		"ttsEmpty": "Không có mô hình giọng nói.",
+		"ttsParameters": "Tham số giọng nói",
+		"ttsParametersDescription": "Điều chỉnh tham số của mô hình giọng nói.",
+		"noTts": "Không dùng giọng nói"
+	},
+	"setup": {
+		"title": "Kết nối ASOFT AI Services",
+		"description": "Nhập địa chỉ dịch vụ và người dùng ERPX để bắt đầu.",
+		"serverUrl": "Địa chỉ dịch vụ",
+		"serverUrlPlaceholder": "http://localhost:8000",
+		"username": "Người dùng ERPX",
+		"usernamePlaceholder": "Tên người dùng",
+		"submit": "Bắt đầu",
+		"hint": "Giao diện kết nối trực tiếp tới ASOFT AI Services. Tên người dùng được gửi qua X-User-ID để backend nhận diện phiên làm việc."
+	},
+	"tour": {
+		"trigger": "Hướng dẫn sử dụng",
+		"prev": "Quay lại",
+		"next": "Tiếp theo",
+		"finish": "Hoàn tất",
+		"skip": "Bỏ qua",
+		"step": "Bước {{current}} / {{total}}",
+		"createAgent": {
+			"title": "Tạo tác nhân",
+			"content": "Bắt đầu bằng cách tạo một tác nhân AI."
+		},
+		"createSession": {
+			"title": "Tạo phiên",
+			"content": "Nhấn dấu + để bắt đầu phiên mới."
+		},
+		"llmSelect": {
+			"title": "Chọn mô hình",
+			"content": "Chọn mô hình hoặc thêm thông tin xác thực."
+		},
+		"permissionMode": {
+			"title": "Chế độ quyền",
+			"content": "Quyết định thao tác công cụ nào cần xác nhận."
+		},
+		"chatInput": {
+			"title": "Bắt đầu trò chuyện",
+			"content": "Nhập tin nhắn và nhấn Enter. Biểu tượng ghim dùng để đính kèm tệp."
+		}
+	},
+	"task-panel": {
+		"heading": "Tác vụ",
+		"noTasks": "Chưa có tác vụ.",
+		"pending": "Chờ xử lý",
+		"inProgress": "Đang thực hiện",
+		"completed": "Hoàn thành",
+		"blockedBy": "bị chặn bởi"
+	},
+	"panel": {
+		"plan": {
+			"title": "Kế hoạch",
+			"completed": "Hoàn thành: {{count}}",
+			"total": "Tổng: {{count}}",
+			"emptyTitle": "Chưa có tác vụ",
+			"emptyDescription": "Các tác vụ do tác nhân lập kế hoạch sẽ xuất hiện tại đây."
+		},
+		"mcp": {
+			"title": "MCP",
+			"description": "Các máy chủ MCP trong không gian làm việc.",
+			"searchPlaceholder": "Tìm MCP",
+			"add": "Thêm MCP",
+			"tools": "{{count}} công cụ",
+			"emptyTitle": "Chưa có máy chủ MCP",
+			"emptyDescription": "Thêm máy chủ MCP để cung cấp công cụ cho tác nhân."
+		},
+		"skill": {
+			"title": "Kỹ năng",
+			"description": "Các kỹ năng trong không gian làm việc.",
+			"searchPlaceholder": "Tìm kỹ năng",
+			"add": "Thêm kỹ năng",
+			"emptyTitle": "Chưa có kỹ năng",
+			"emptyDescription": "Thêm kỹ năng cho tác nhân."
+		},
+		"permission": {
+			"title": "Quyền",
+			"description": "Các quyền áp dụng trong phiên này.",
+			"mode": "Chế độ: {{mode}}",
+			"workingDirectories": "Thư mục làm việc",
+			"noWorkingDirectories": "Không có thư mục làm việc.",
+			"allow": "Cho phép",
+			"deny": "Từ chối",
+			"ask": "Hỏi",
+			"anyInvocation": "mọi lần gọi",
+			"emptyTitle": "Chưa cấu hình quy tắc",
+			"emptyDescription": "Các quy tắc cho phép, từ chối hoặc hỏi sẽ xuất hiện tại đây."
+		},
+		"search": {
+			"emptyTitle": "Không có kết quả",
+			"emptyDescription": "Không có nội dung khớp với “{{query}}”."
+		},
+		"loading": "Đang tải…"
+	},
+	"team-sidebar": {
+		"membersHeading": "Thành viên",
+		"noMembers": "Chưa có thành viên — hãy yêu cầu trưởng nhóm tạo một thành viên.",
+		"running": "Đang chạy",
+		"idle": "Đang chờ",
+		"missingSession": "(không có phiên)"
+	}
+}

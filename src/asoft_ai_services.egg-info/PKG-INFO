@@ -1,0 +1,190 @@
+Metadata-Version: 2.4
+Name: asoft-ai-services
+Version: 2.0.3
+Summary: Python AI services platform for ASOFT ERPX.
+License-Expression: Apache-2.0
+Keywords: ASOFT,ERPX,AI services,agent,multi-agent,LLM
+Classifier: Development Status :: 4 - Beta
+Classifier: Programming Language :: Python :: 3
+Classifier: Programming Language :: Python :: 3.11
+Classifier: Operating System :: OS Independent
+Classifier: Intended Audience :: Developers
+Classifier: Intended Audience :: Science/Research
+Classifier: Topic :: Scientific/Engineering :: Artificial Intelligence
+Requires-Python: >=3.11
+Description-Content-Type: text/markdown
+Requires-Dist: aioitertools
+Requires-Dist: anthropic
+Requires-Dist: dashscope
+Requires-Dist: docstring_parser
+Requires-Dist: filetype
+Requires-Dist: json5
+Requires-Dist: json_repair
+Requires-Dist: mcp
+Requires-Dist: httpx
+Requires-Dist: numpy
+Requires-Dist: openai
+Requires-Dist: python-datauri
+Requires-Dist: opentelemetry-api>=1.39.0
+Requires-Dist: opentelemetry-sdk>=1.39.0
+Requires-Dist: opentelemetry-exporter-otlp>=1.39.0
+Requires-Dist: opentelemetry-semantic-conventions>=0.60b0
+Requires-Dist: python-socketio
+Requires-Dist: shortuuid
+Requires-Dist: python-frontmatter
+Requires-Dist: jinja2
+Requires-Dist: aiofiles
+Requires-Dist: tree_sitter
+Requires-Dist: tree_sitter_bash
+Requires-Dist: jsonschema
+Provides-Extra: gemini
+Requires-Dist: google-genai; extra == "gemini"
+Provides-Extra: ollama
+Requires-Dist: ollama>=0.5.4; extra == "ollama"
+Provides-Extra: xai
+Requires-Dist: xai-sdk; extra == "xai"
+Provides-Extra: models
+Requires-Dist: asoft-ai-services[ollama]; extra == "models"
+Requires-Dist: asoft-ai-services[gemini]; extra == "models"
+Requires-Dist: asoft-ai-services[xai]; extra == "models"
+Provides-Extra: service
+Requires-Dist: fastapi; extra == "service"
+Requires-Dist: uvicorn; extra == "service"
+Requires-Dist: apscheduler; extra == "service"
+Requires-Dist: ag-ui-protocol>=0.1.10; extra == "service"
+Provides-Extra: storage
+Requires-Dist: redis; extra == "storage"
+Provides-Extra: workspace
+Requires-Dist: aiodocker; extra == "workspace"
+Requires-Dist: e2b; extra == "workspace"
+Provides-Extra: tools
+Requires-Dist: ripgrep; extra == "tools"
+Provides-Extra: mem0
+Requires-Dist: mem0ai>=2.0.0; extra == "mem0"
+Provides-Extra: full
+Requires-Dist: asoft-ai-services[models]; extra == "full"
+Requires-Dist: asoft-ai-services[service]; extra == "full"
+Requires-Dist: asoft-ai-services[storage]; extra == "full"
+Requires-Dist: asoft-ai-services[workspace]; extra == "full"
+Requires-Dist: asoft-ai-services[tools]; extra == "full"
+Requires-Dist: asoft-ai-services[mem0]; extra == "full"
+Provides-Extra: dev
+Requires-Dist: asoft-ai-services[full]; extra == "dev"
+Requires-Dist: pre-commit; extra == "dev"
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pytest-forked; extra == "dev"
+Requires-Dist: myst_parser; extra == "dev"
+Requires-Dist: matplotlib; extra == "dev"
+Requires-Dist: fakeredis; extra == "dev"
+
+# ASOFT AI Services
+
+ASOFT AI Services is the Python AI platform developed by ASOFT for ERPX. It
+provides the agent runtime, model integrations, tools, and service APIs needed
+to add AI capabilities to the ERPX ecosystem.
+
+The source is organized around four main areas:
+
+- `Runtime`: agents, messages, events, middleware, and runtime state.
+- `Providers/modelLLM`: LLM chat models and provider-specific formatters.
+- `Providers/modelBSN`: specialized embedding, OCR, STT, and TTS models.
+- `Providers/credential`: shared provider credentials and connection settings.
+- `Capabilities`: tools, MCP, permissions, skills, and workspaces.
+- `Service`: the FastAPI application, storage, scheduling, and Web UI APIs.
+
+The project requires Python 3.11 or newer.
+
+## Purpose
+
+- Provide reusable Python AI services for ERPX applications.
+- Keep model providers and agent capabilities behind stable ASOFT interfaces.
+- Support multi-tenant, multi-session deployments and ERPX integration.
+- Allow ERPX-specific storage, authentication, tools, and business workflows to
+  be added without coupling them to a model provider.
+
+## Installation
+
+Install the project from source:
+
+```bash
+uv sync --all-extras
+```
+
+Alternatively, install it in editable mode:
+
+```bash
+uv pip install -e ".[full]"
+```
+
+The distribution name is `asoft-ai-services`. It installs the top-level Python
+packages `Common`, `Providers`, `Capabilities`, `Runtime`, and `Service`.
+
+## Quick start
+
+```python
+import asyncio
+import os
+
+from Capabilities.tool import Bash, Edit, Glob, Grep, Read, Toolkit, Write
+from Providers.credential import DashScopeCredential
+from Providers.modelLLM.model import DashScopeChatModel
+from Runtime.agent import Agent
+from Runtime.event import EventType
+from Runtime.message import UserMsg
+
+
+async def main() -> None:
+    agent = Agent(
+        name="Friday",
+        system_prompt="You're a helpful assistant named Friday.",
+        model=DashScopeChatModel(
+            credential=DashScopeCredential(
+                api_key=os.environ["DASHSCOPE_API_KEY"],
+            ),
+            model="qwen3.6-plus",
+        ),
+        toolkit=Toolkit(
+            tools=[Bash(), Grep(), Glob(), Read(), Write(), Edit()],
+        ),
+    )
+
+    async for event in agent.reply_stream(UserMsg("Tony", "Hi, Friday!")):
+        if event.type == EventType.TEXT_BLOCK_DELTA:
+            print(event)
+
+
+asyncio.run(main())
+```
+
+## Agent service
+
+The application under `service` provides a FastAPI-based, multi-tenant and
+multi-session agent service:
+
+```bash
+uv sync --all-extras
+uv run python service/main.py
+```
+
+The backend listens on `http://localhost:8000` by default and requires Redis.
+See [service/README.md](service/README.md) for the complete setup.
+
+## Web UI
+
+Run the companion interface in another terminal:
+
+```bash
+cd development/Web_UI_test
+pnpm install
+pnpm dev
+```
+
+Detailed setup and architecture documentation:
+
+- [Setup guide](docs/huong_dan_cai_dat.md)
+- [Project architecture](docs/kien_truc_du_an.md)
+- [AI Service API and Postman examples](docs/Thong_tin_API_ASOFT_AI_SERVICES.md)
+
+## License
+
+Licensed under the Apache License 2.0.
