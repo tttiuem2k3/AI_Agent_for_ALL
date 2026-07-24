@@ -118,6 +118,7 @@ class OpenAIResponseFormatter(_OpenAIResponseFormatterBase):
         self.assert_list_of_msgs(msgs)
 
         items: list[dict] = []
+        tool_call_ids: dict[str, str] = {}
         i = 0
         while i < len(msgs):
             msg = msgs[i]
@@ -245,12 +246,13 @@ class OpenAIResponseFormatter(_OpenAIResponseFormatterBase):
                     # For other APIs (Chat Completions, DashScope …) only one
                     # ID exists; call_id extra field is None and we fall back
                     # to id for both fields.
+                    call_id = getattr(block, "call_id", None) or block.id
+                    tool_call_ids[block.id] = call_id
                     function_calls.append(
                         {
                             "type": "function_call",
                             "id": block.id,
-                            "call_id": getattr(block, "call_id", None)
-                            or block.id,
+                            "call_id": call_id,
                             "name": block.name,
                             "arguments": block.input,
                         },
@@ -285,7 +287,7 @@ class OpenAIResponseFormatter(_OpenAIResponseFormatterBase):
                     items.append(
                         {
                             "type": "function_call_output",
-                            "call_id": block.id,
+                            "call_id": tool_call_ids.get(block.id, block.id),
                             "output": textual_output,
                         },
                     )

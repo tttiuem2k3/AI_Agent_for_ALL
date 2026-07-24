@@ -301,6 +301,48 @@ class TestOpenAIResponseFormatter(IsolatedAsyncioTestCase):
         res = await fmt.format([])
         self.assertListEqual([], res)
 
+    async def test_tool_result_uses_responses_call_id(self) -> None:
+        """Pair function_call_output with call_id, not the fc item id."""
+        msgs = [
+            AssistantMsg(
+                name="assistant",
+                content=[
+                    ToolCallBlock(
+                        id="fc_item_1",
+                        call_id="call_request_1",
+                        name="Read",
+                        input='{"file_path": "example.txt"}',
+                    ),
+                    ToolResultBlock(
+                        id="fc_item_1",
+                        name="Read",
+                        output=[TextBlock(text="file contents")],
+                        state=ToolResultState.SUCCESS,
+                    ),
+                ],
+            ),
+        ]
+
+        res = await OpenAIResponseFormatter().format(msgs)
+
+        self.assertListEqual(
+            [
+                {
+                    "type": "function_call",
+                    "id": "fc_item_1",
+                    "call_id": "call_request_1",
+                    "name": "Read",
+                    "arguments": '{"file_path": "example.txt"}',
+                },
+                {
+                    "type": "function_call_output",
+                    "call_id": "call_request_1",
+                    "output": "file contents",
+                },
+            ],
+            res,
+        )
+
     async def test_chat_formatter_base64_image(self) -> None:
         """Base64-encoded image becomes an input_image item with data URI."""
         fmt = OpenAIResponseFormatter()
