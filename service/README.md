@@ -16,6 +16,8 @@ $env:ASOFT_AI_REDIS_PASSWORD = "<secret>"
 $env:ASOFT_AI_REDIS_DATABASE = "0"
 $env:ASOFT_AI_REDIS_SSL = "false"
 $env:ASOFT_AI_WORKSPACE_DIR = "D:\\ASOFT_AI\\workspaces"
+$env:ASOFT_ERPX_SQL_CONNECTION_STRING = "<injected ERPX connection string>"
+$env:ASOFT_SERVICES_API_KEY = "<existing SERVICES api-key>"
 
 uv sync --extra service --extra storage --extra models --extra mem0
 uv run python service/main.py
@@ -28,6 +30,11 @@ Python `ripgrep` package and therefore requires the MSVC linker toolchain.
 `ASOFT_AI_REDIS_STORAGE_DB` and `ASOFT_AI_REDIS_BUS_DB` can override the
 shared database independently. When omitted, both use
 `ASOFT_AI_REDIS_DATABASE`.
+
+When both ERPX SQL and SERVICES api-key settings are present, the host reads
+only `ST2101.MainAPIURL/MainAPIPort` to resolve the SERVICES origin used by
+dynamic tools. The connection string and api-key are never model-visible and
+must be injected by the process manager.
 
 Operational probes:
 

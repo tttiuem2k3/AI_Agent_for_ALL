@@ -3,7 +3,7 @@
 from pydantic import BaseModel, Field
 
 from Runtime.agent import ContextConfig, ReActConfig
-from ...storage import AgentRecord
+from ...storage import AgentRecord, CapabilityManifest
 
 
 class CreateAgentRequest(BaseModel):
@@ -21,6 +21,10 @@ class CreateAgentRequest(BaseModel):
     react_config: ReActConfig = Field(
         default_factory=ReActConfig,
         description="ReAct loop configuration.",
+    )
+    base_capabilities: CapabilityManifest | None = Field(
+        default=None,
+        description="ERPX Agent-level capability manifest.",
     )
 
 
@@ -48,6 +52,10 @@ class UpdateAgentRequest(BaseModel):
     react_config: ReActConfig | None = Field(
         default=None,
         description="New ReAct loop configuration.",
+    )
+    base_capabilities: CapabilityManifest | None = Field(
+        default=None,
+        description="Replacement ERPX Agent-level capability manifest.",
     )
 
 

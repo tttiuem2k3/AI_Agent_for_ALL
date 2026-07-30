@@ -1,4 +1,9 @@
 {
-  "skills_dir_mtime": 1784709581.8676815,
-  "skills": {}
+  "skills_dir_mtime": 1785224371.6652455,
+  "skills": {
+    "skill-02": {
+      "hash": "e731e4111b3cc4c7b5bc6f37559dbedcb21755af30cb54a9bb333117f8ce0cb6",
+      "skill_name": "skill-02"
+    }
+  }
 }

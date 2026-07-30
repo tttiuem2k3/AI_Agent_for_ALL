@@ -17,6 +17,9 @@ from Service.app.storage import (
     SessionSource,
     TeamData,
     TeamRecord,
+    CapabilityManifestV2,
+    DirectModelRuntimeProfile,
+    compute_capability_manifest_v2_hash,
 )
 from Providers.credential import OllamaCredential
 from Service.app.storage import AgentData
@@ -255,6 +258,61 @@ class TestSession(IsolatedAsyncioTestCase):
         )
         records = await self.storage.list_sessions(self.user_id, self.agent_id)
         self.assertEqual([record.id for record in records], [session_id])
+
+    async def test_update_existing_session_replaces_runtime_profile(self) -> None:
+        """PATCH-style upsert must persist a refreshed DirectModel profile."""
+        subject_id = "dm-runtime-subject"
+        manifest_payload = {
+            "manifest_version": "2",
+            "subject_type": "DirectModel",
+            "subject_id": subject_id,
+            "user_id": self.user_id,
+            "division_id": "ASOFT",
+            "tools": [],
+            "skills": [],
+        }
+        manifest = CapabilityManifestV2(
+            **manifest_payload,
+            hash=compute_capability_manifest_v2_hash(manifest_payload),
+        )
+        original = DirectModelRuntimeProfile(
+            base_capabilities=manifest,
+            react_config=ReActConfig(max_iters=10),
+        )
+        replacement = DirectModelRuntimeProfile(
+            base_capabilities=manifest,
+            react_config=ReActConfig(max_iters=30),
+        )
+        session_id = "direct-model-session"
+
+        await self.storage.upsert_session(
+            self.user_id,
+            None,
+            make_session_config(self.workspace_id),
+            session_id=session_id,
+            runtime_profile=original,
+            runtime_subject_id=subject_id,
+        )
+        await self.storage.upsert_session(
+            self.user_id,
+            None,
+            make_session_config(self.workspace_id),
+            session_id=session_id,
+            runtime_profile=replacement,
+            runtime_subject_id=subject_id,
+        )
+
+        fetched = await self.storage.get_session(
+            self.user_id,
+            None,
+            session_id,
+        )
+        self.assertIsNotNone(fetched)
+        self.assertIsInstance(
+            fetched.runtime_profile,
+            DirectModelRuntimeProfile,
+        )
+        self.assertEqual(fetched.runtime_profile.react_config.max_iters, 30)
 
     async def test_delete(self) -> None:
         """Delete a session and verify it is gone from Redis."""

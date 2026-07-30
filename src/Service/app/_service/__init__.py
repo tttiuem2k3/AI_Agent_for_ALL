@@ -8,6 +8,7 @@ from ._session import SessionService
 from ._session_projection import SessionProjection
 from ._projectors import SubagentHitlProjector
 from ._toolkit import get_toolkit
+from ._erpx_tool_gateway import ERPXToolFactory, ERPXToolGatewayClient
 
 __all__ = [
     "ChatService",
@@ -18,4 +19,6 @@ __all__ = [
     "get_model",
     "get_tts_model",
     "get_toolkit",
+    "ERPXToolFactory",
+    "ERPXToolGatewayClient",
 ]

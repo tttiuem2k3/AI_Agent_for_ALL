@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Request / response schemas for the session router."""
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from Capabilities.permission import PermissionMode
 from ...storage import (
@@ -9,6 +9,10 @@ from ...storage import (
     TTSModelConfig,
     SessionRecord,
     TeamRecord,
+    CapabilitySnapshot,
+    AgentRuntimeProfile,
+    DirectModelRuntimeProfile,
+    RuntimeProfile,
 )
 
 
@@ -55,7 +59,24 @@ class TeamDetailResponse(BaseModel):
 class CreateSessionRequest(BaseModel):
     """Request body for creating a new session."""
 
-    agent_id: str = Field(description="Agent this session belongs to.")
+    agent_id: str | None = Field(
+        default=None,
+        description="Persisted Agent id. Omit for DirectModel.",
+    )
+    runtime_subject_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="Immutable DirectModel runtime subject.",
+    )
+    runtime_profile: RuntimeProfile | None = Field(
+        default=None,
+        description=(
+            "Explicit runtime construction profile. Omitted legacy requests "
+            "are interpreted as Agent sessions."
+        ),
+    )
     workspace_id: str | None = Field(
         default=None,
         description="Workspace this session belongs to.",
@@ -78,12 +99,57 @@ class CreateSessionRequest(BaseModel):
         default=None,
         description="TTS model configuration. Can be set later via PATCH.",
     )
+    effective_capabilities: CapabilitySnapshot | None = Field(
+        default=None,
+        description="Effective ERPX capability snapshot for this session.",
+    )
+
+    @model_validator(mode="after")
+    def _validate_runtime_shape(self) -> "CreateSessionRequest":
+        if self.runtime_profile is None:
+            if not self.agent_id:
+                raise ValueError("Agent session requires agent_id")
+            self.runtime_profile = AgentRuntimeProfile(agent_id=self.agent_id)
+            if self.runtime_subject_id is not None:
+                raise ValueError(
+                    "Agent session cannot have runtime_subject_id",
+                )
+            return self
+
+        if isinstance(self.runtime_profile, AgentRuntimeProfile):
+            if self.agent_id != self.runtime_profile.agent_id:
+                raise ValueError(
+                    "Agent runtime profile does not match agent_id",
+                )
+            if self.runtime_subject_id is not None:
+                raise ValueError(
+                    "Agent session cannot have runtime_subject_id",
+                )
+            return self
+
+        if isinstance(self.runtime_profile, DirectModelRuntimeProfile):
+            if self.agent_id is not None:
+                raise ValueError(
+                    "DirectModel session cannot reference agent_id",
+                )
+            expected = self.runtime_profile.base_capabilities.subject_id
+            if self.runtime_subject_id != expected:
+                raise ValueError(
+                    "DirectModel runtime subject does not match base manifest",
+                )
+            return self
+
+        raise ValueError("Unsupported runtime profile")
 
 
 class CreateSessionResponse(BaseModel):
     """Response body after creating a session."""
 
     session_id: str = Field(description="Server-assigned session identifier.")
+    runtime_subject_id: str | None = Field(
+        default=None,
+        description="DirectModel runtime subject; null for Agent sessions.",
+    )
 
 
 class CancelSessionResponse(BaseModel):
@@ -127,6 +193,17 @@ class UpdateSessionRequest(BaseModel):
     permission_mode: PermissionMode | None = Field(
         default=None,
         description="New permission mode for the session.",
+    )
+    effective_capabilities: CapabilitySnapshot | None = Field(
+        default=None,
+        description="Replacement effective ERPX capability snapshot.",
+    )
+    runtime_profile: RuntimeProfile | None = Field(
+        default=None,
+        description=(
+            "Trusted replacement runtime profile. Only DirectModel callers "
+            "may replace the profile to synchronize base capabilities."
+        ),
     )
 
 

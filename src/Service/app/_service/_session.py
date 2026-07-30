@@ -46,12 +46,16 @@ component that touches both in the same call. Storage code never
 imports the bus; bus code never imports storage.
 """
 import asyncio
+from typing import TYPE_CHECKING
 
 from ..message_bus import MessageBus, MessageBusKeys
 from ..storage import StorageBase
 from ._session_projection import SessionProjection
 from ._projectors import SubagentHitlProjector
 from _logging import logger
+
+if TYPE_CHECKING:
+    from ..workspace_manager import WorkspaceManagerBase
 
 
 class SessionService:
@@ -81,6 +85,7 @@ class SessionService:
         self,
         storage: StorageBase,
         message_bus: MessageBus,
+        workspace_manager: "WorkspaceManagerBase | None" = None,
     ) -> None:
         """Bind dependencies.
 
@@ -90,6 +95,7 @@ class SessionService:
         """
         self._storage = storage
         self._bus = message_bus
+        self._workspace_manager = workspace_manager
         self._projection = SessionProjection(message_bus)
 
     # ------------------------------------------------------------------
@@ -169,7 +175,7 @@ class SessionService:
     async def delete_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> bool:
         """Cancel, delete and bus-purge a single session.
@@ -207,6 +213,11 @@ class SessionService:
                 :meth:`StorageBase.delete_session`.
         """
         # Identify all bus-purge targets before storage mutates anything.
+        session_record = await self._storage.get_session(
+            user_id,
+            agent_id,
+            session_id,
+        )
         worker_sids = await self._team_worker_session_ids(
             user_id,
             agent_id,
@@ -219,6 +230,18 @@ class SessionService:
         await self._purge_subagent_hitl(user_id, agent_id, session_id)
 
         await self._cancel_runs(all_sids)
+        if self._workspace_manager is not None and session_record is not None:
+            try:
+                await self._workspace_manager.close(
+                    session_record.config.workspace_id,
+                )
+            except Exception as error:  # pylint: disable=broad-except
+                logger.warning(
+                    "Failed to close workspace %s for session %s: %s",
+                    session_record.config.workspace_id,
+                    session_id,
+                    type(error).__name__,
+                )
         deleted = await self._storage.delete_session(
             user_id,
             agent_id,
@@ -326,7 +349,7 @@ class SessionService:
     async def _team_worker_session_ids(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> list[str]:
         """Return the session ids of every worker in the team that
@@ -409,7 +432,7 @@ class SessionService:
     async def _purge_subagent_hitl(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> None:
         """Clean leader-side subagent HITL projections for a session

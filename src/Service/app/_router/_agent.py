@@ -129,6 +129,7 @@ async def create_agent(
             system_prompt=body.system_prompt,
             context_config=body.context_config,
             react_config=body.react_config,
+            base_capabilities=body.base_capabilities,
         ),
     )
     agent_id = await storage.upsert_agent(user_id, record)

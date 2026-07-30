@@ -30,7 +30,11 @@ from .._service import SessionService, SessionProjection, SubagentHitlProjector
 from .._service._model import get_model
 from ..storage import (
     AgentRecord,
+    AgentRuntimeProfile,
+    CapabilityManifest,
+    CapabilityManifestV2,
     ChatModelConfig,
+    DirectModelRuntimeProfile,
     TTSModelConfig,
     SessionConfig,
     SessionRecord,
@@ -94,6 +98,29 @@ session_router = APIRouter(
 )
 
 
+async def _get_owned_session(
+    storage: StorageBase,
+    user_id: str,
+    session_id: str,
+    agent_id: str | None,
+    runtime_subject_id: str | None,
+) -> SessionRecord | None:
+    """Resolve a session and enforce its discriminated runtime identity."""
+    if bool(agent_id) == bool(runtime_subject_id):
+        return None
+    record = await storage.get_session(user_id, agent_id, session_id)
+    if record is None:
+        return None
+    if agent_id is not None and record.agent_id != agent_id:
+        return None
+    if (
+        runtime_subject_id is not None
+        and record.runtime_subject_id != runtime_subject_id
+    ):
+        return None
+    return record
+
+
 @session_router.post(
     "/{session_id}/cancel",
     response_model=CancelSessionResponse,
@@ -101,13 +128,26 @@ session_router = APIRouter(
 )
 async def cancel_session_run(
     session_id: str,
-    agent_id: str = Query(description="Agent that owns the session."),
+    agent_id: str | None = Query(
+        default=None,
+        description="Agent that owns an Agent-mode session.",
+    ),
+    runtime_subject_id: str | None = Query(
+        default=None,
+        description="Runtime subject that owns a DirectModel session.",
+    ),
     user_id: str = Depends(get_current_user_id),
     storage: StorageBase = Depends(get_storage),
     service: SessionService = Depends(get_session_service),
 ) -> CancelSessionResponse:
     """Cancel a run idempotently after verifying session ownership."""
-    existing = await storage.get_session(user_id, agent_id, session_id)
+    existing = await _get_owned_session(
+        storage,
+        user_id,
+        session_id,
+        agent_id,
+        runtime_subject_id,
+    )
     if existing is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -161,7 +201,14 @@ async def _ensure_credential_exists(
     summary="List sessions for an agent",
 )
 async def list_sessions(
-    agent_id: str = Query(description="Filter sessions by agent ID."),
+    agent_id: str | None = Query(
+        default=None,
+        description="Filter Agent-mode sessions by Agent ID.",
+    ),
+    runtime_subject_id: str | None = Query(
+        default=None,
+        description="Filter DirectModel sessions by runtime subject.",
+    ),
     user_id: str = Depends(get_current_user_id),
     storage: StorageBase = Depends(get_storage),
     message_bus: MessageBus = Depends(get_message_bus),
@@ -197,14 +244,23 @@ async def list_sessions(
     # and source=team agents (the latter aren't returned by
     # storage.list_agents but are still owned by the user; reachable
     # via team navigation).
-    agent = await storage.get_agent(user_id, agent_id)
-    if agent is None or agent.user_id != user_id:
+    if bool(agent_id) == bool(runtime_subject_id):
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Agent '{agent_id}' not found.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide exactly one runtime identity.",
         )
+    if agent_id is not None:
+        agent = await storage.get_agent(user_id, agent_id)
+        if agent is None or agent.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent '{agent_id}' not found.",
+            )
+        index_owner = agent_id
+    else:
+        index_owner = f"direct_model__{runtime_subject_id}"
 
-    sessions = await storage.list_sessions(user_id, agent_id)
+    sessions = await storage.list_sessions(user_id, index_owner)
     views: list[SessionView] = []
     for session in sessions:
         team_detail = None
@@ -257,11 +313,71 @@ async def create_session(
         `HTTPException`: 404 if the agent or credential does not exist or
             does not belong to the authenticated user.
     """
-    agent = await storage.get_agent(user_id, body.agent_id)
-    if agent is None or agent.user_id != user_id:
+    runtime_profile = body.runtime_profile
+    assert runtime_profile is not None
+
+    if isinstance(runtime_profile, AgentRuntimeProfile):
+        agent = await storage.get_agent(user_id, runtime_profile.agent_id)
+        if agent is None or agent.user_id != user_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Agent '{runtime_profile.agent_id}' not found.",
+            )
+        if (
+            body.effective_capabilities is not None
+            and not isinstance(body.effective_capabilities, CapabilityManifest)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Agent session requires capability manifest v1.",
+            )
+    elif isinstance(runtime_profile, DirectModelRuntimeProfile):
+        effective = (
+            body.effective_capabilities
+            or runtime_profile.base_capabilities
+        )
+        if not isinstance(effective, CapabilityManifestV2):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="DirectModel session requires capability manifest v2.",
+            )
+        base = runtime_profile.base_capabilities
+        if (
+            effective.subject_type != "DirectModel"
+            or effective.subject_id != base.subject_id
+            or effective.user_id != base.user_id
+            or effective.division_id != base.division_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="DirectModel capability binding does not match session.",
+            )
+        base_tools = {
+            tool.tool_id: tool.model_dump(mode="json")
+            for tool in base.tools
+        }
+        base_skills = {
+            skill.skill_id: skill.model_dump(mode="json")
+            for skill in base.skills
+        }
+        if any(
+            base_tools.get(tool.tool_id) != tool.model_dump(mode="json")
+            for tool in effective.tools
+        ) or any(
+            base_skills.get(skill.skill_id) != skill.model_dump(mode="json")
+            for skill in effective.skills
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "DirectModel effective capabilities are not an exact "
+                    "subset of the session base manifest."
+                ),
+            )
+    else:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Agent '{body.agent_id}' not found.",
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unsupported runtime profile.",
         )
 
     await _ensure_credential_exists(storage, user_id, body.chat_model_config)
@@ -280,10 +396,27 @@ async def create_session(
             chat_model_config=body.chat_model_config,
             fallback_chat_model_config=body.fallback_chat_model_config,
             tts_model_config=body.tts_model_config,
+            effective_capabilities=(
+                body.effective_capabilities
+                if body.effective_capabilities is not None
+                else (
+                    runtime_profile.base_capabilities
+                    if isinstance(
+                        runtime_profile,
+                        DirectModelRuntimeProfile,
+                    )
+                    else None
+                )
+            ),
             **({"name": body.name} if body.name is not None else {}),
         ),
+        runtime_profile=runtime_profile,
+        runtime_subject_id=body.runtime_subject_id,
     )
-    return CreateSessionResponse(session_id=session_record.id)
+    return CreateSessionResponse(
+        session_id=session_record.id,
+        runtime_subject_id=session_record.runtime_subject_id,
+    )
 
 
 @session_router.delete(
@@ -293,8 +426,16 @@ async def create_session(
 )
 async def delete_session(
     session_id: str,
-    agent_id: str = Query(description="Agent the session belongs to."),
+    agent_id: str | None = Query(
+        default=None,
+        description="Agent the session belongs to.",
+    ),
+    runtime_subject_id: str | None = Query(
+        default=None,
+        description="DirectModel runtime subject.",
+    ),
     user_id: str = Depends(get_current_user_id),
+    storage: StorageBase = Depends(get_storage),
     session_service: SessionService = Depends(get_session_service),
 ) -> None:
     """Permanently delete a session and all its associated state.
@@ -315,6 +456,19 @@ async def delete_session(
         `HTTPException`: 404 if the session does not exist or does not belong
             to the authenticated user.
     """
+    existing = await _get_owned_session(
+        storage,
+        user_id,
+        session_id,
+        agent_id,
+        runtime_subject_id,
+    )
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found.",
+        )
+
     deleted = await session_service.delete_session(
         user_id,
         agent_id,
@@ -335,7 +489,14 @@ async def delete_session(
 async def update_session(
     session_id: str,
     body: UpdateSessionRequest,
-    agent_id: str = Query(description="Agent the session belongs to."),
+    agent_id: str | None = Query(
+        default=None,
+        description="Agent the session belongs to.",
+    ),
+    runtime_subject_id: str | None = Query(
+        default=None,
+        description="DirectModel runtime subject.",
+    ),
     user_id: str = Depends(get_current_user_id),
     storage: StorageBase = Depends(get_storage),
 ) -> SessionRecord:
@@ -354,12 +515,84 @@ async def update_session(
         `HTTPException`: 404 if the session, agent, or credential does not
             exist or does not belong to the authenticated user.
     """
-    existing = await storage.get_session(user_id, agent_id, session_id)
+    existing = await _get_owned_session(
+        storage,
+        user_id,
+        session_id,
+        agent_id,
+        runtime_subject_id,
+    )
     if existing is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session '{session_id}' not found.",
         )
+
+    replacement_profile = body.runtime_profile
+    if replacement_profile is not None:
+        if not isinstance(existing.runtime_profile, DirectModelRuntimeProfile):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Agent runtime profiles cannot be replaced.",
+            )
+        if not isinstance(replacement_profile, DirectModelRuntimeProfile):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="DirectModel session requires a DirectModel profile.",
+            )
+        if (
+            replacement_profile.base_capabilities.subject_id
+            != existing.runtime_subject_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="DirectModel runtime subject is immutable.",
+            )
+
+    effective = body.effective_capabilities
+    profile_for_validation = replacement_profile or existing.runtime_profile
+    if isinstance(profile_for_validation, DirectModelRuntimeProfile):
+        if effective is not None and not isinstance(
+            effective,
+            CapabilityManifestV2,
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="DirectModel session requires capability manifest v2.",
+            )
+        candidate = effective or existing.config.effective_capabilities
+        if isinstance(candidate, CapabilityManifestV2):
+            base = profile_for_validation.base_capabilities
+            base_tools = {
+                tool.tool_id: tool.model_dump(mode="json")
+                for tool in base.tools
+            }
+            base_skills = {
+                skill.skill_id: skill.model_dump(mode="json")
+                for skill in base.skills
+            }
+            if (
+                candidate.subject_id != base.subject_id
+                or candidate.user_id != base.user_id
+                or candidate.division_id != base.division_id
+                or any(
+                    base_tools.get(tool.tool_id)
+                    != tool.model_dump(mode="json")
+                    for tool in candidate.tools
+                )
+                or any(
+                    base_skills.get(skill.skill_id)
+                    != skill.model_dump(mode="json")
+                    for skill in candidate.skills
+                )
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail=(
+                        "DirectModel effective capabilities are not an exact "
+                        "subset of the replacement base manifest."
+                    ),
+                )
 
     await _ensure_credential_exists(storage, user_id, body.chat_model_config)
     await _ensure_credential_exists(
@@ -387,7 +620,7 @@ async def update_session(
     # ``fallback_chat_model_config``.
     config_updates = body.model_dump(
         exclude_unset=True,
-        exclude={"permission_mode"},
+        exclude={"permission_mode", "runtime_profile"},
     )
 
     return await storage.upsert_session(
@@ -398,6 +631,8 @@ async def update_session(
         ),
         state=updated_state,
         session_id=session_id,
+        runtime_profile=replacement_profile or existing.runtime_profile,
+        runtime_subject_id=existing.runtime_subject_id,
     )
 
 
@@ -413,7 +648,14 @@ async def update_session(
 )
 async def list_messages(
     session_id: str,
-    agent_id: str = Query(description="Agent the session belongs to."),
+    agent_id: str | None = Query(
+        default=None,
+        description="Agent the session belongs to.",
+    ),
+    runtime_subject_id: str | None = Query(
+        default=None,
+        description="DirectModel runtime subject.",
+    ),
     offset: int = Query(0, ge=0, description="Pagination offset."),
     limit: int = Query(50, ge=1, le=200, description="Max messages."),
     user_id: str = Depends(get_current_user_id),
@@ -434,7 +676,13 @@ async def list_messages(
     Returns:
         Messages and running status.
     """
-    existing = await storage.get_session(user_id, agent_id, session_id)
+    existing = await _get_owned_session(
+        storage,
+        user_id,
+        session_id,
+        agent_id,
+        runtime_subject_id,
+    )
     if existing is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -525,7 +773,14 @@ async def _worker_still_asking(
 )
 async def stream_session_events(
     session_id: str,
-    agent_id: str = Query(description="Agent the session belongs to."),
+    agent_id: str | None = Query(
+        default=None,
+        description="Agent the session belongs to.",
+    ),
+    runtime_subject_id: str | None = Query(
+        default=None,
+        description="DirectModel runtime subject.",
+    ),
     user_id: str = Depends(get_current_user_id),
     storage: StorageBase = Depends(get_storage),
     message_bus: MessageBus = Depends(get_message_bus),
@@ -559,7 +814,13 @@ async def stream_session_events(
         `StreamingResponse`:
             SSE stream of AgentEvent frames + periodic heartbeats.
     """
-    existing = await storage.get_session(user_id, agent_id, session_id)
+    existing = await _get_owned_session(
+        storage,
+        user_id,
+        session_id,
+        agent_id,
+        runtime_subject_id,
+    )
     if existing is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

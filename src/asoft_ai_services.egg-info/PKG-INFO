@@ -52,6 +52,7 @@ Requires-Dist: fastapi; extra == "service"
 Requires-Dist: uvicorn; extra == "service"
 Requires-Dist: apscheduler; extra == "service"
 Requires-Dist: ag-ui-protocol>=0.1.10; extra == "service"
+Requires-Dist: pyodbc>=5.1; extra == "service"
 Provides-Extra: storage
 Requires-Dist: redis; extra == "storage"
 Provides-Extra: workspace
@@ -162,7 +163,7 @@ The application under `service` provides a FastAPI-based, multi-tenant and
 multi-session agent service:
 
 ```bash
-uv sync --all-extras
+uv sync --extra service --extra storage --extra models --extra mem0
 uv run python service/main.py
 ```
 

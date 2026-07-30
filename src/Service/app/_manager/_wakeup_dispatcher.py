@@ -183,7 +183,8 @@ class WakeupDispatcher:
             try:
                 user_id = payload["user_id"]
                 session_id = payload["session_id"]
-                agent_id = payload["agent_id"]
+                agent_id = payload.get("agent_id")
+                runtime_subject_id = payload.get("runtime_subject_id")
             except (KeyError, TypeError):
                 logger.warning(
                     "WakeupDispatcher: skipping malformed trigger entry %r",
@@ -196,6 +197,7 @@ class WakeupDispatcher:
                 user_id=user_id,
                 session_id=session_id,
                 agent_id=agent_id,
+                runtime_subject_id=runtime_subject_id,
                 kind=kind,
                 raw_input=payload.get("input"),
             )
@@ -204,7 +206,8 @@ class WakeupDispatcher:
         self,
         user_id: str,
         session_id: str,
-        agent_id: str,
+        agent_id: str | None,
+        runtime_subject_id: str | None,
         kind: str,
         raw_input: dict | None,
     ) -> None:
@@ -260,6 +263,7 @@ class WakeupDispatcher:
                     user_id,
                     session_id,
                     agent_id,
+                    runtime_subject_id,
                     input_msg,
                 )
             # ``wake`` triggers are safe to drop while running — the
@@ -271,9 +275,21 @@ class WakeupDispatcher:
         # BG-task completion callback or a schedule trigger) will still
         # arrive here. Drop it rather than letting ChatService.run crash
         # on a missing storage record.
+        session = await self._storage.get_session(
+            user_id,
+            agent_id,
+            session_id,
+        )
         if (
-            await self._storage.get_session(user_id, agent_id, session_id)
-            is None
+            session is None
+            or (
+                agent_id is not None
+                and session.agent_id != agent_id
+            )
+            or (
+                runtime_subject_id is not None
+                and session.runtime_subject_id != runtime_subject_id
+            )
         ):
             logger.warning(
                 "WakeupDispatcher: dropping %s trigger for session %s "
@@ -293,6 +309,7 @@ class WakeupDispatcher:
                     user_id=user_id,
                     session_id=session_id,
                     agent_id=agent_id,
+                    runtime_subject_id=runtime_subject_id,
                     input_msg=input_msg,
                 ),
                 session_id=session_id,
@@ -307,6 +324,7 @@ class WakeupDispatcher:
                     user_id,
                     session_id,
                     agent_id,
+                    runtime_subject_id,
                     input_msg,
                 )
             else:
@@ -320,7 +338,8 @@ class WakeupDispatcher:
         self,
         user_id: str,
         session_id: str,
-        agent_id: str,
+        agent_id: str | None,
+        runtime_subject_id: str | None,
         input_msg: UserConfirmResultEvent
         | ExternalExecutionResultEvent
         | None,
@@ -351,6 +370,7 @@ class WakeupDispatcher:
                     user_id=user_id,
                     session_id=session_id,
                     agent_id=agent_id,
+                    runtime_subject_id=runtime_subject_id,
                     kind=MessageBusKeys.WAKEUP_KIND_RESUME,
                     inputs=input_msg,
                 )

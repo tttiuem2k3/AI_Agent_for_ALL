@@ -305,6 +305,12 @@ class Toolkit:
                 and not tool_func.is_external_tool
             ):
                 kwargs["_agent_state"] = state
+            if (
+                getattr(tool_func, "is_tool_call_id_injected", False)
+                and not tool_func.is_mcp
+                and not tool_func.is_external_tool
+            ):
+                kwargs["_runtime_tool_call_id"] = tool_call.id
 
             if inspect.iscoroutinefunction(tool_func.__call__):
                 res = await tool_func(**kwargs)

@@ -37,7 +37,12 @@ from .._service import (
     SubagentHitlProjector,
 )
 from ..message_bus import MessageBus, MessageBusKeys
-from ..storage import StorageBase
+from ..storage import (
+    CapabilityManifest,
+    CapabilityManifestV2,
+    DirectModelRuntimeProfile,
+    StorageBase,
+)
 from .._bus_ops import enqueue_run_trigger
 from Runtime.event import UserConfirmResultEvent, ExternalExecutionResultEvent
 
@@ -46,6 +51,170 @@ chat_router = APIRouter(
     tags=["chat"],
     responses={404: {"description": "Not found"}},
 )
+
+
+async def _refresh_effective_capabilities(
+    request: ChatRequest,
+    user_id: str,
+    storage: StorageBase,
+) -> None:
+    """Validate and persist a fresh ERPX capability snapshot before a run."""
+    manifest = request.effective_capabilities
+    if manifest is None:
+        if request.runtime_subject_id is None:
+            return
+        session = await storage.get_session(
+            user_id,
+            None,
+            request.session_id,
+        )
+        if (
+            session is None
+            or session.runtime_subject_id != request.runtime_subject_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="DirectModel runtime session was not found.",
+            )
+        if not isinstance(
+            request.input,
+            (UserConfirmResultEvent, ExternalExecutionResultEvent),
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    "DirectModel chat requires a fresh capability "
+                    "manifest v2."
+                ),
+            )
+        return
+
+    session = await storage.get_session(
+        user_id,
+        request.agent_id,
+        request.session_id,
+    )
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="ERPX runtime session was not found.",
+        )
+
+    if session.agent_id is not None:
+        if (
+            request.agent_id != session.agent_id
+            or not isinstance(manifest, CapabilityManifest)
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="ERPX Agent/session capability binding was not found.",
+            )
+        agent = await storage.get_agent(user_id, session.agent_id)
+        if agent is None or agent.data.base_capabilities is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="ERPX Agent capability binding was not found.",
+            )
+        base = agent.data.base_capabilities
+        session_binding = session.config.effective_capabilities
+        if (
+            (
+                isinstance(session_binding, CapabilityManifest)
+                and manifest.user_id != session_binding.user_id
+            )
+            or manifest.agent_apk != base.agent_apk
+            or manifest.agent_id != base.agent_id
+            or manifest.division_id != base.division_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "ERPX capability manifest does not match its "
+                    "Agent/session."
+                ),
+            )
+    else:
+        profile = session.runtime_profile
+        if (
+            not isinstance(profile, DirectModelRuntimeProfile)
+            or not isinstance(manifest, CapabilityManifestV2)
+            or request.runtime_subject_id != session.runtime_subject_id
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="DirectModel runtime binding was not found.",
+            )
+        base = profile.base_capabilities
+        session_binding = session.config.effective_capabilities
+        if (
+            manifest.subject_type != "DirectModel"
+            or manifest.subject_id != session.runtime_subject_id
+            or manifest.subject_id != base.subject_id
+            or manifest.user_id != base.user_id
+            or manifest.division_id != base.division_id
+            or (
+                isinstance(session_binding, CapabilityManifestV2)
+                and (
+                    manifest.user_id != session_binding.user_id
+                    or manifest.division_id != session_binding.division_id
+                    or manifest.subject_id != session_binding.subject_id
+                )
+            )
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "DirectModel capability manifest does not match its "
+                    "session."
+                ),
+            )
+
+    base_tools = {tool.tool_id: tool for tool in base.tools}
+    for effective_tool in manifest.tools:
+        base_tool = base_tools.get(effective_tool.tool_id)
+        if (
+            base_tool is None
+            or effective_tool.model_dump(mode="json")
+            != base_tool.model_dump(mode="json")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "ERPX effective capabilities are not a subset of "
+                    "Agent base capabilities."
+                ),
+            )
+
+    base_skills = {skill.skill_id: skill for skill in base.skills}
+    for effective_skill in manifest.skills:
+        base_skill = base_skills.get(effective_skill.skill_id)
+        if (
+            base_skill is None
+            or effective_skill.model_dump(mode="json")
+            != base_skill.model_dump(mode="json")
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "ERPX effective Skills are not a subset of Agent "
+                    "base capabilities."
+                ),
+            )
+
+    await storage.upsert_session(
+        user_id=user_id,
+        agent_id=request.agent_id,
+        config=session.config.model_copy(
+            update={
+                "effective_capabilities": manifest,
+                "runtime_run_id": request.runtime_run_id,
+            },
+        ),
+        state=session.state,
+        session_id=request.session_id,
+        runtime_profile=session.runtime_profile,
+        runtime_subject_id=session.runtime_subject_id,
+    )
 
 
 @chat_router.post(
@@ -101,6 +270,8 @@ async def chat(
             Only direct-spawn paths (new messages / ``None``) can raise
             this; the enqueued resume path never does.
     """
+    await _refresh_effective_capabilities(request, user_id, storage)
+
     request_reserved = False
     if request.request_id is not None:
         request_reserved = await storage.reserve_chat_request(
@@ -132,6 +303,7 @@ async def chat(
     ):
         run_session_id = request.session_id
         run_agent_id = request.agent_id
+        run_runtime_subject_id = request.runtime_subject_id
         target = await SubagentHitlProjector.resolve(
             SessionProjection(message_bus),
             request.session_id,
@@ -140,6 +312,7 @@ async def chat(
         if target is not None:
             run_session_id = target["worker_session_id"]
             run_agent_id = target["worker_agent_id"]
+            run_runtime_subject_id = None
 
         try:
             await enqueue_run_trigger(
@@ -147,6 +320,7 @@ async def chat(
                 user_id=user_id,
                 session_id=run_session_id,
                 agent_id=run_agent_id,
+                runtime_subject_id=run_runtime_subject_id,
                 kind=MessageBusKeys.WAKEUP_KIND_RESUME,
                 inputs=request.input,
             )
@@ -170,6 +344,7 @@ async def chat(
                 user_id=user_id,
                 session_id=request.session_id,
                 agent_id=request.agent_id,
+                runtime_subject_id=request.runtime_subject_id,
                 input_msg=request.input,
             ),
             session_id=request.session_id,

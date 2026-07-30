@@ -9,6 +9,10 @@ from fastapi import HTTPException
 import uvicorn
 
 from Service.app import RedisMessageBus, create_app
+from Service.app._service import ERPXToolFactory, ERPXToolGatewayClient
+from Service.app._service._erpx_services_config import (
+    resolve_services_base_url,
+)
 from Service.app.storage import RedisStorage
 from Service.app.workspace_manager import LocalWorkspaceManager
 
@@ -52,6 +56,8 @@ class ServiceHostSettings:
     redis_bus_db: int
     redis_ssl: bool
     workspace_dir: Path
+    erpx_sql_connection_string: str | None
+    services_api_key: str | None
 
     @classmethod
     def from_env(cls) -> "ServiceHostSettings":
@@ -72,6 +78,15 @@ class ServiceHostSettings:
             workspace_dir=Path(
                 os.getenv("ASOFT_AI_WORKSPACE_DIR", "./data/workspaces"),
             ).resolve(),
+            erpx_sql_connection_string=(
+                os.getenv(
+                    "ASOFT_ERPX_SQL_CONNECTION_STRING",
+                    "",
+                ).strip() or None
+            ),
+            services_api_key=(
+                os.getenv("ASOFT_SERVICES_API_KEY", "") or None
+            ),
         )
 
     def redis_kwargs(self) -> dict[str, object]:
@@ -91,17 +106,35 @@ class ServiceHostSettings:
 
 
 settings = ServiceHostSettings.from_env()
+if bool(settings.erpx_sql_connection_string) != bool(
+    settings.services_api_key,
+):
+    raise RuntimeError(
+        "ASOFT_ERPX_SQL_CONNECTION_STRING and "
+        "ASOFT_SERVICES_API_KEY must be configured together.",
+    )
 settings.workspace_dir.mkdir(parents=True, exist_ok=True)
 
 redis_kwargs = settings.redis_kwargs()
+storage = RedisStorage(
+    host=settings.redis_host,
+    port=settings.redis_port,
+    db=settings.redis_storage_db,
+    password=settings.redis_password,
+    **redis_kwargs,
+)
+tool_gateway_client = (
+    ERPXToolGatewayClient(
+        base_url=resolve_services_base_url(
+            settings.erpx_sql_connection_string,
+        ),
+        api_key=settings.services_api_key,
+    )
+    if settings.erpx_sql_connection_string and settings.services_api_key
+    else None
+)
 app = create_app(
-    storage=RedisStorage(
-        host=settings.redis_host,
-        port=settings.redis_port,
-        db=settings.redis_storage_db,
-        password=settings.redis_password,
-        **redis_kwargs,
-    ),
+    storage=storage,
     message_bus=RedisMessageBus(
         host=settings.redis_host,
         port=settings.redis_port,
@@ -110,6 +143,7 @@ app = create_app(
         **redis_kwargs,
     ),
     workspace_manager=LocalWorkspaceManager(str(settings.workspace_dir)),
+    extra_agent_tools=ERPXToolFactory(storage, tool_gateway_client),
 )
 
 

@@ -20,6 +20,7 @@ src/Capabilities/tool/__init__.py
 src/Capabilities/tool/_adapters.py
 src/Capabilities/tool/_base.py
 src/Capabilities/tool/_constants.py
+src/Capabilities/tool/_erpx_dynamic.py
 src/Capabilities/tool/_response.py
 src/Capabilities/tool/_tool_group.py
 src/Capabilities/tool/_toolkit.py
@@ -289,6 +290,7 @@ src/Providers/modelLLM/formatter/_openai_formatter.py
 src/Providers/modelLLM/formatter/_openai_response_formatter.py
 src/Providers/modelLLM/formatter/_xai_formatter.py
 src/Providers/modelLLM/model/__init__.py
+src/Providers/modelLLM/model/_adapter_registry.py
 src/Providers/modelLLM/model/_base.py
 src/Providers/modelLLM/model/_model_card.py
 src/Providers/modelLLM/model/_model_response.py
@@ -437,6 +439,8 @@ src/Service/app/_router/_schema/_tts_model.py
 src/Service/app/_service/__init__.py
 src/Service/app/_service/_chat.py
 src/Service/app/_service/_embedding.py
+src/Service/app/_service/_erpx_services_config.py
+src/Service/app/_service/_erpx_tool_gateway.py
 src/Service/app/_service/_model.py
 src/Service/app/_service/_session.py
 src/Service/app/_service/_session_projection.py
@@ -475,6 +479,7 @@ src/Service/app/storage/_utils.py
 src/Service/app/storage/_model/__init__.py
 src/Service/app/storage/_model/_agent.py
 src/Service/app/storage/_model/_base.py
+src/Service/app/storage/_model/_capability.py
 src/Service/app/storage/_model/_credential.py
 src/Service/app/storage/_model/_schedule.py
 src/Service/app/storage/_model/_session.py

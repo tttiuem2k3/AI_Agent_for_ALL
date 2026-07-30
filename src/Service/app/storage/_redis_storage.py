@@ -15,6 +15,7 @@ from ._model import (
     SessionRecord,
     SessionConfig,
     SessionSource,
+    RuntimeProfile,
     TeamRecord,
 )
 from ._utils import _dump_with_secrets
@@ -520,12 +521,14 @@ class RedisStorage(StorageBase):
     async def upsert_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         config: SessionConfig,
         state: AgentState | None = None,
         session_id: str | None = None,
         source: SessionSource = SessionSource.USER,
         source_schedule_id: str | None = None,
+        runtime_profile: RuntimeProfile | None = None,
+        runtime_subject_id: str | None = None,
     ) -> SessionRecord:
         """Create or update a session for a (user, agent) pair.
 
@@ -541,7 +544,18 @@ class RedisStorage(StorageBase):
             raw = await self._client.get(key)
             if raw:
                 record = SessionRecord.model_validate_json(raw)
+                if agent_id is not None and record.agent_id != agent_id:
+                    raise ValueError("Session does not belong to this Agent")
+                if (
+                    runtime_subject_id is not None
+                    and record.runtime_subject_id != runtime_subject_id
+                ):
+                    raise ValueError(
+                        "Session does not belong to this runtime subject",
+                    )
                 record.config = config
+                if runtime_profile is not None:
+                    record.runtime_profile = runtime_profile
                 if state is not None:
                     record.state = state
                 record.updated_at = datetime.now()
@@ -555,6 +569,8 @@ class RedisStorage(StorageBase):
         record = SessionRecord(
             user_id=user_id,
             agent_id=agent_id,
+            runtime_profile=runtime_profile,
+            runtime_subject_id=runtime_subject_id,
             config=config,
             source=source,
             source_schedule_id=source_schedule_id,
@@ -569,7 +585,7 @@ class RedisStorage(StorageBase):
         index_key = self._key(
             self.key_config.session_index,
             user_id=user_id,
-            agent_id=agent_id,
+            agent_id=record.runtime_owner_id,
         )
         await self._set_with_ttl(key, record.model_dump_json())
         await self._client.sadd(index_key, record.id)
@@ -587,7 +603,7 @@ class RedisStorage(StorageBase):
     async def update_session_state(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
         state: AgentState,
     ) -> None:
@@ -605,6 +621,8 @@ class RedisStorage(StorageBase):
         if not raw:
             raise KeyError(f"Session {session_id!r} not found.")
         record = SessionRecord.model_validate_json(raw)
+        if agent_id not in (None, "") and record.agent_id != agent_id:
+            raise KeyError(f"Session {session_id!r} not found.")
         record.state = state
         record.updated_at = datetime.now()
         await self._set_with_ttl(key, record.model_dump_json())
@@ -651,7 +669,7 @@ class RedisStorage(StorageBase):
     async def get_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> SessionRecord | None:
         """Fetch a single session record by id."""
@@ -663,12 +681,15 @@ class RedisStorage(StorageBase):
         raw = await self._client.get(key)
         if not raw:
             return None
-        return SessionRecord.model_validate_json(raw)
+        record = SessionRecord.model_validate_json(raw)
+        if agent_id not in (None, "") and record.agent_id != agent_id:
+            return None
+        return record
 
     async def delete_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> bool:
         """Delete a session record and cascade clean-up.
@@ -716,6 +737,8 @@ class RedisStorage(StorageBase):
             return False
 
         record = SessionRecord.model_validate_json(raw)
+        if agent_id not in (None, "") and record.agent_id != agent_id:
+            return False
 
         # Cascade: if this session leads a team, dissolve it first.
         if record.team_id:
@@ -726,7 +749,7 @@ class RedisStorage(StorageBase):
         index_key = self._key(
             self.key_config.session_index,
             user_id=user_id,
-            agent_id=agent_id,
+            agent_id=record.runtime_owner_id,
         )
         msg_key = self._key(
             self.key_config.messages,

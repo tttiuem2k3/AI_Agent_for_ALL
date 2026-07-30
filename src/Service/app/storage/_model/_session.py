@@ -3,9 +3,15 @@
 from datetime import datetime
 from enum import Enum
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from ._base import _RecordBase
+from ._capability import CapabilitySnapshot
+from ._runtime import (
+    AgentRuntimeProfile,
+    DirectModelRuntimeProfile,
+    RuntimeProfile,
+)
 from Runtime.state import AgentState
 
 
@@ -98,6 +104,16 @@ class SessionConfig(BaseModel):
     tts_model_config: TTSModelConfig | None = None
     """The TTS model config. None means TTS is not enabled."""
 
+    effective_capabilities: CapabilitySnapshot | None = None
+    """User/division-specific ERPX capability snapshot for this session.
+
+    ``None`` preserves compatibility for non-ERPX callers. ERPX always sends
+    an explicit manifest, including an empty one for fail-closed sessions.
+    """
+
+    runtime_run_id: str | None = None
+    """Trusted ERPX RunID for the currently executing chat request."""
+
 
 class SessionRecord(_RecordBase):
     """The session record."""
@@ -105,8 +121,18 @@ class SessionRecord(_RecordBase):
     user_id: str
     """The user id."""
 
-    agent_id: str
-    """The agent id."""
+    agent_id: str | None = None
+    """Persisted Agent id. ``None`` for session-native DirectModel."""
+
+    runtime_subject_id: str | None = None
+    """Immutable session runtime subject for DirectModel."""
+
+    runtime_profile: RuntimeProfile | None = None
+    """Discriminated runtime construction profile.
+
+    Stored sessions created before DM-2 omit this field and are interpreted as
+    Agent sessions from their existing ``agent_id``.
+    """
 
     source: SessionSource = SessionSource.USER
     """The source that created this session."""
@@ -127,3 +153,46 @@ class SessionRecord(_RecordBase):
 
     state: AgentState = Field(default_factory=AgentState)
     """Mutable runtime state, updated after each chat turn."""
+
+    @model_validator(mode="after")
+    def _validate_runtime_identity(self) -> "SessionRecord":
+        profile = self.runtime_profile
+        if profile is None:
+            if not self.agent_id:
+                raise ValueError(
+                    "Legacy session without runtime_profile requires agent_id",
+                )
+            self.runtime_profile = AgentRuntimeProfile(agent_id=self.agent_id)
+            return self
+
+        if isinstance(profile, AgentRuntimeProfile):
+            if self.agent_id != profile.agent_id:
+                raise ValueError("Agent runtime profile does not match agent_id")
+            if self.runtime_subject_id is not None:
+                raise ValueError(
+                    "Agent runtime session cannot have runtime_subject_id",
+                )
+            return self
+
+        if isinstance(profile, DirectModelRuntimeProfile):
+            if self.agent_id is not None:
+                raise ValueError(
+                    "DirectModel runtime session cannot reference agent_id",
+                )
+            subject_id = profile.base_capabilities.subject_id
+            if self.runtime_subject_id != subject_id:
+                raise ValueError(
+                    "DirectModel runtime subject does not match base manifest",
+                )
+            return self
+
+        raise ValueError("Unsupported runtime profile")
+
+    @property
+    def runtime_owner_id(self) -> str:
+        """Return the persisted index/workspace owner for this session."""
+        if self.agent_id:
+            return self.agent_id
+        if self.runtime_subject_id:
+            return f"direct_model__{self.runtime_subject_id}"
+        raise ValueError("Session runtime identity is incomplete")

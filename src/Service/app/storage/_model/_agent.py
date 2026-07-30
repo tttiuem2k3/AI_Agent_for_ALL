@@ -7,6 +7,7 @@ from pydantic import Field, BaseModel
 from Common._utils._common import _generate_id
 from ._base import _RecordBase
 from Runtime.agent import ContextConfig, ReActConfig
+from ._capability import CapabilityManifest
 
 
 class AgentData(BaseModel):
@@ -40,6 +41,14 @@ class AgentData(BaseModel):
     react_config: ReActConfig = Field(
         description="The react config for the agent.",
         title="React Config",
+    )
+
+    base_capabilities: CapabilityManifest | None = Field(
+        default=None,
+        description=(
+            "ERPX Agent-level assignment/scope/runtime capability manifest. "
+            "None preserves non-ERPX compatibility."
+        ),
     )
 
 

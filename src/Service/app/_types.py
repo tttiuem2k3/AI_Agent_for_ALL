@@ -25,7 +25,7 @@ AgentMiddlewareFactory = Callable[
 # awaitable of :class:`~Runtime.middleware.MiddlewareBase` instances.
 
 AgentToolFactory = Callable[
-    [str, str, str],
+    [str, str | None, str],
     Awaitable[list[ToolBase]],
 ]
 #  Async factory signature: ``(user_id, agent_id, session_id)`` →

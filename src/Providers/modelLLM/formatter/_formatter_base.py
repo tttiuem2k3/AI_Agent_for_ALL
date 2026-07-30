@@ -50,8 +50,7 @@ class FormatterBase(BaseModel):
         """Format the Msg objects to a list of dictionaries that satisfy the
         API requirements."""
 
-    @staticmethod
-    def assert_list_of_msgs(msgs: list[Msg]) -> None:
+    def assert_list_of_msgs(self, msgs: list[Msg]) -> None:
         """Assert that the input is a list of Msg objects.
 
         Args:
@@ -66,6 +65,18 @@ class FormatterBase(BaseModel):
                 raise TypeError(
                     f"Expected Msg object, got {type(msg)} instead.",
                 )
+            for block in msg.get_content_blocks():
+                if not isinstance(block, DataBlock):
+                    continue
+                media_type = block.source.media_type
+                if not any(
+                    fnmatch(media_type, pattern)
+                    for pattern in self.supported_input_media_types
+                ):
+                    raise ValueError(
+                        "unsupported_input_type: "
+                        f"model formatter does not accept {media_type}",
+                    )
 
     def convert_tool_result_to_string(
         self,

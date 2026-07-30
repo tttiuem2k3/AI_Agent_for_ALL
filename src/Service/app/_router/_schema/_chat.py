@@ -1,17 +1,26 @@
 # -*- coding: utf-8 -*-
 """The chat endpoint schema."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from Runtime.message import Msg
 from Runtime.event import UserConfirmResultEvent, ExternalExecutionResultEvent
+from ...storage import CapabilitySnapshot
 
 
 class ChatRequest(BaseModel):
     """Request body for the chat endpoint."""
 
-    agent_id: str = Field(
+    agent_id: str | None = Field(
+        default=None,
         description="Agent ID for the chat endpoint.",
+    )
+    runtime_subject_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        pattern=r"^[A-Za-z0-9_-]+$",
+        description="DirectModel runtime subject.",
     )
 
     session_id: str = Field(
@@ -25,6 +34,21 @@ class ChatRequest(BaseModel):
         description="Optional durable idempotency key scoped to the session.",
     )
 
+    effective_capabilities: CapabilitySnapshot | None = Field(
+        default=None,
+        description=(
+            "Fresh ERPX user/division capability snapshot. Omitted by "
+            "non-ERPX callers and legacy HITL resume requests."
+        ),
+    )
+
+    runtime_run_id: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Trusted ERPX RunID used for Tool Gateway idempotency.",
+    )
+
     input: (
         Msg
         | list[Msg]
@@ -34,6 +58,14 @@ class ChatRequest(BaseModel):
     ) = Field(
         description="The input message(s), or agent event, or None.",
     )
+
+    @model_validator(mode="after")
+    def _validate_runtime_identity(self) -> "ChatRequest":
+        if bool(self.agent_id) == bool(self.runtime_subject_id):
+            raise ValueError(
+                "Provide exactly one of agent_id or runtime_subject_id",
+            )
+        return self
 
 
 class ChatTriggerResponse(BaseModel):

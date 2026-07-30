@@ -69,8 +69,9 @@ async def enqueue_run_trigger(
     bus: "MessageBus",
     user_id: str,
     session_id: str,
-    agent_id: str,
+    agent_id: str | None,
     *,
+    runtime_subject_id: str | None = None,
     kind: Literal["wake", "resume"] = MessageBusKeys.WAKEUP_KIND_WAKE,
     inputs: UserConfirmResultEvent
     | ExternalExecutionResultEvent
@@ -109,12 +110,17 @@ async def enqueue_run_trigger(
             ``model_dump(mode="json")`` internally — callers pass the
             event object, not a pre-serialised dict.
     """
+    if bool(agent_id) == bool(runtime_subject_id):
+        raise ValueError(
+            "Run trigger requires exactly one runtime identity",
+        )
     await bus.queue_push(
         MessageBusKeys.wakeup_queue(),
         {
             "user_id": user_id,
             "session_id": session_id,
             "agent_id": agent_id,
+            "runtime_subject_id": runtime_subject_id,
             "kind": kind,
             "input": inputs.model_dump(mode="json") if inputs else None,
         },

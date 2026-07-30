@@ -12,6 +12,7 @@ from ._model import (
     SessionRecord,
     SessionConfig,
     SessionSource,
+    RuntimeProfile,
     TeamRecord,
 )
 from Providers.credential import CredentialBase
@@ -172,18 +173,21 @@ class StorageBase(ABC):
     async def upsert_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         config: SessionConfig,
         state: AgentState | None = None,
         session_id: str | None = None,
         source: SessionSource = SessionSource.USER,
         source_schedule_id: str | None = None,
+        runtime_profile: RuntimeProfile | None = None,
+        runtime_subject_id: str | None = None,
     ) -> SessionRecord:
         """Create or update a session for a (user, agent) pair.
 
         Args:
             user_id (`str`): The owner user id.
-            agent_id (`str`): The agent id.
+            agent_id (`str | None`): Persisted Agent id, or ``None`` for
+                session-native DirectModel.
             config (`SessionConfig`): Immutable session configuration
                 (model, workspace). Required on create; passed unchanged on
                 state-only updates.
@@ -231,7 +235,7 @@ class StorageBase(ABC):
     async def update_session_state(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
         state: AgentState,
     ) -> None:
@@ -267,7 +271,7 @@ class StorageBase(ABC):
     async def delete_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> bool:
         """Delete a session.
@@ -285,7 +289,7 @@ class StorageBase(ABC):
     async def get_session(
         self,
         user_id: str,
-        agent_id: str,
+        agent_id: str | None,
         session_id: str,
     ) -> SessionRecord | None:
         """Fetch a single session record by id.

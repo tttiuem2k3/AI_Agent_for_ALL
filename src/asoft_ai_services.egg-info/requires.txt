@@ -59,6 +59,7 @@ fastapi
 uvicorn
 apscheduler
 ag-ui-protocol>=0.1.10
+pyodbc>=5.1
 
 [storage]
 redis

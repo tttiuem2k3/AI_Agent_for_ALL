@@ -343,6 +343,8 @@ pygments==2.20.0
     #   sphinx
 pyjwt==2.13.0
     # via mcp
+pyodbc==5.3.0
+    # via asoft-ai-services
 pyparsing==3.3.2
     # via matplotlib
 pytest==9.1.1

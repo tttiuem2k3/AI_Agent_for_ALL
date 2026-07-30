@@ -17,7 +17,13 @@ from fastapi import HTTPException
 
 from ..message_bus import MessageBus, MessageBusKeys
 from .._bus_ops import publish_session_event
-from ..storage import StorageBase, AgentRecord, SessionRecord
+from ..storage import (
+    AgentRecord,
+    AgentRuntimeProfile,
+    DirectModelRuntimeProfile,
+    SessionRecord,
+    StorageBase,
+)
 from .._manager import BackgroundTaskManager, SchedulerManager
 from ..workspace_manager import WorkspaceManagerBase
 from ..middleware import (
@@ -49,6 +55,14 @@ from Runtime.event import (
 )
 from Runtime.message import AssistantMsg, Msg, ToolCallState
 from Capabilities.permission import AdditionalWorkingDirectory
+
+_DIRECT_SYSTEM_PROMPTS = {
+    "direct-chat-v1": (
+        "You are a helpful enterprise assistant. Follow the user's request "
+        "and use only the tools and skills explicitly available in this "
+        "session."
+    ),
+}
 
 
 class ChatService:
@@ -142,7 +156,8 @@ class ChatService:
         self,
         user_id: str,
         session_id: str,
-        agent_id: str,
+        agent_id: str | None,
+        runtime_subject_id: str | None = None,
         input_msg: Msg
         | list[Msg]
         | UserConfirmResultEvent
@@ -184,7 +199,13 @@ class ChatService:
                   tool call (Case B).
         """
         try:
-            await self._run_impl(user_id, session_id, agent_id, input_msg)
+            await self._run_impl(
+                user_id,
+                session_id,
+                agent_id,
+                runtime_subject_id,
+                input_msg,
+            )
         except Exception as e:
             code, message, retryable = self._sanitize_run_error(e)
             try:
@@ -277,7 +298,8 @@ class ChatService:
         self,
         user_id: str,
         session_id: str,
-        agent_id: str,
+        agent_id: str | None,
+        runtime_subject_id: str | None,
         input_msg: Msg
         | list[Msg]
         | UserConfirmResultEvent
@@ -293,12 +315,6 @@ class ChatService:
         # Reject missing records up front with a clear error so the
         # downstream assembly code can rely on non-None values.
         # ----------------------------------------------------------------
-        agent_record = await self._storage.get_agent(user_id, agent_id)
-        if agent_record is None:
-            raise HTTPException(
-                status_code=404,
-                detail=f"Agent {agent_id!r} not found.",
-            )
         session_record = await self._storage.get_session(
             user_id,
             agent_id,
@@ -308,13 +324,58 @@ class ChatService:
             raise HTTPException(
                 status_code=404,
                 detail=(
-                    f"Session {session_id!r} not found for "
-                    f"agent {agent_id!r}."
+                    f"Session {session_id!r} was not found."
                 ),
             )
+        profile = session_record.runtime_profile
+        assert profile is not None
+
+        agent_record: AgentRecord | None = None
+        if isinstance(profile, AgentRuntimeProfile):
+            if agent_id != profile.agent_id or runtime_subject_id is not None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Agent session runtime identity does not match.",
+                )
+            agent_record = await self._storage.get_agent(
+                user_id,
+                profile.agent_id,
+            )
+            if agent_record is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Agent {profile.agent_id!r} not found.",
+                )
+            runtime_owner_id = profile.agent_id
+            runtime_name = agent_record.data.name
+            system_prompt = agent_record.data.system_prompt
+            context_config = agent_record.data.context_config
+            react_config = agent_record.data.react_config
+        elif isinstance(profile, DirectModelRuntimeProfile):
+            if (
+                agent_id is not None
+                or runtime_subject_id != session_record.runtime_subject_id
+            ):
+                raise HTTPException(
+                    status_code=404,
+                    detail="DirectModel session runtime identity does not match.",
+                )
+            runtime_owner_id = session_record.runtime_owner_id
+            runtime_name = "DirectModel"
+            system_prompt = _DIRECT_SYSTEM_PROMPTS[
+                profile.system_prompt_profile
+            ]
+            context_config = profile.context_config
+            react_config = profile.react_config
+        else:
+            raise HTTPException(
+                status_code=400,
+                detail="Unsupported session runtime profile.",
+            )
+
         workspace = await self._workspace_manager.get_workspace(
             user_id,
-            agent_id,
+            runtime_owner_id,
             session_id,
             session_record.config.workspace_id,
         )
@@ -361,18 +422,24 @@ class ChatService:
                 message_bus=self._message_bus,
                 session_id=session_id,
             ),
-            ToolOffloadMiddleware(
-                bg_manager=self._background_task_manager,
-                message_bus=self._message_bus,
-                user_id=user_id,
-                agent_id=agent_id,
-            ),
         ]
-        if self._extra_agent_middlewares is not None:
+        if agent_record is not None:
+            middlewares.append(
+                ToolOffloadMiddleware(
+                    bg_manager=self._background_task_manager,
+                    message_bus=self._message_bus,
+                    user_id=user_id,
+                    agent_id=agent_record.id,
+                ),
+            )
+        if (
+            self._extra_agent_middlewares is not None
+            and agent_record is not None
+        ):
             middlewares.extend(
                 await self._extra_agent_middlewares(
                     user_id,
-                    agent_id,
+                    agent_record.id,
                     session_id,
                 ),
             )
@@ -413,13 +480,13 @@ class ChatService:
         agent_state = session_record.state
         agent_state.session_id = session_id
         agent = self._agent_cls(
-            name=agent_record.data.name,
-            system_prompt=agent_record.data.system_prompt,
+            name=runtime_name,
+            system_prompt=system_prompt,
             model=model,
             toolkit=toolkit,
             model_config=ModelConfig(fallback_model=fallback_model),
-            context_config=agent_record.data.context_config,
-            react_config=agent_record.data.react_config,
+            context_config=context_config,
+            react_config=react_config,
             state=agent_state,
             middlewares=middlewares,
             offloader=workspace,
@@ -494,12 +561,13 @@ class ChatService:
                             session_id,
                             event.model_dump(mode="json"),
                         )
-                        await self._project_event(
-                            user_id,
-                            session_record,
-                            agent_record,
-                            event,
-                        )
+                        if agent_record is not None:
+                            await self._project_event(
+                                user_id,
+                                session_record,
+                                agent_record,
+                                event,
+                            )
                         if isinstance(event, ReplyStartEvent):
                             reply_msg = AssistantMsg(
                                 id=event.reply_id,
@@ -535,12 +603,13 @@ class ChatService:
                             session_id,
                             event.model_dump(mode="json"),
                         )
-                        await self._project_event(
-                            user_id,
-                            session_record,
-                            agent_record,
-                            event,
-                        )
+                        if agent_record is not None:
+                            await self._project_event(
+                                user_id,
+                                session_record,
+                                agent_record,
+                                event,
+                            )
                         if reply_msg is not None:
                             reply_msg.append_event(event)
 
