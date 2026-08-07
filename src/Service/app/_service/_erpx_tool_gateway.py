@@ -4,7 +4,7 @@ from typing import Any
 
 import httpx
 
-from Capabilities.tool import ERPXDynamicTool, ToolBase
+from Capabilities.tool import ERPXDynamicTool, ERPXExternalTool, ToolBase
 from ..storage import CapabilityManifestV2, StorageBase
 
 
@@ -118,7 +118,18 @@ class ERPXToolFactory:
         if manifest is None:
             return []
 
-        dynamic = [tool for tool in manifest.tools if tool.tool_type != "Builtin"]
+        # Tools ON executes itself. They surface to the model but never run
+        # here, so they need neither a gateway client nor a ToolType allowlist —
+        # the executor plane is ON's decision, carried in ``executor_type``.
+        external = [tool for tool in manifest.tools if tool.is_external_execution]
+        # Tools the runtime still calls in-process through the curated gateway.
+        # This is the legacy chat path and stays restricted to ``ServicesApi``:
+        # nothing else has ever had a working in-process executor.
+        dynamic = [
+            tool
+            for tool in manifest.tools
+            if not tool.is_external_execution and tool.tool_type != "Builtin"
+        ]
         unsupported = [
             tool.tool_type
             for tool in dynamic
@@ -128,8 +139,22 @@ class ERPXToolFactory:
             raise ValueError(
                 "Unsupported ERPX runtime ToolType in effective capabilities.",
             )
+
+        external_tools: list[ToolBase] = [
+            ERPXExternalTool(
+                tool_id=tool.tool_id,
+                name=tool.function_name,
+                description=tool.description_for_llm,
+                input_schema=tool.input_schema,
+                output_schema=tool.output_schema,
+                is_read_only=tool.is_read_only,
+                require_approval=tool.require_approval,
+            )
+            for tool in external
+        ]
+
         if not dynamic:
-            return []
+            return external_tools
         if self._client is None:
             raise ValueError("ERPX Tool Gateway is not configured.")
         direct_model = isinstance(manifest, CapabilityManifestV2)
@@ -152,7 +177,7 @@ class ERPXToolFactory:
                 "and a trusted RunID.",
             )
 
-        return [
+        return external_tools + [
             ERPXDynamicTool(
                 tool_id=tool.tool_id,
                 name=tool.function_name,

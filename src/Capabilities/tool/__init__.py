@@ -25,7 +25,7 @@ from ._task import (
     TaskCreate,
 )
 from ._tool_group import ToolGroup
-from ._erpx_dynamic import ERPXDynamicTool
+from ._erpx_dynamic import ERPXDynamicTool, ERPXExternalTool
 
 __all__ = [
     # Basic tool related types and functions
@@ -42,6 +42,7 @@ __all__ = [
     "ToolResponse",
     "RegisteredTool",
     "ERPXDynamicTool",
+    "ERPXExternalTool",
     # Builtin tools
     "BackendBase",
     "LocalBackend",
