@@ -24,6 +24,7 @@ from ..storage import (
     SessionRecord,
     SkillCapability,
     StorageBase,
+    WorkflowRuntimeProfile,
 )
 from Capabilities.tool import (
     TaskCreate,
@@ -271,21 +272,31 @@ optional):
         session_record.runtime_profile,
         DirectModelRuntimeProfile,
     )
+    # A workflow turn is unattended and its Tool set was chosen by the graph
+    # author. Every block below that attaches something the manifest did not
+    # ask for is therefore skipped: an unsupervised model reaching for
+    # ToolStop, ScheduleCreate or TeamCreate acts with nobody's authority.
+    workflow = isinstance(
+        session_record.runtime_profile,
+        WorkflowRuntimeProfile,
+    )
+    closed_world = direct_model or workflow
 
     # Planning tools are Agent-mode capabilities. DirectModel MVP only receives
     # explicitly selected catalog tools plus the internal ToolStop control.
-    if not direct_model:
+    if not closed_world:
         tools += [TaskCreate(), TaskList(), TaskGet(), TaskUpdate()]
 
     # Background-task control.
-    tools += await background_task_manager.list_tools(
-        session_id=session_record.id,
-    )
+    if not workflow:
+        tools += await background_task_manager.list_tools(
+            session_id=session_record.id,
+        )
 
     # Schedule control. Requires a model config on this session because
     # ``ScheduleCreate`` records it into new ``ScheduleRecord`` instances.
     if (
-        not direct_model
+        not closed_world
         and session_record.config.chat_model_config is not None
     ):
         assert agent_record is not None
@@ -319,7 +330,7 @@ time or interval"
     # preconditions (am I in a team? am I the leader?) at call time
     # against fresh storage, which is why the full set can be attached
     # unconditionally without needing a stale snapshot of team_id.
-    if not direct_model:
+    if not closed_world:
         assert agent_record is not None
         team_tool_kwargs: dict[str, Any] = {
             "storage": storage,
@@ -365,7 +376,7 @@ time or interval"
     # never inherit workspace MCP visibility. Legacy callers remain unchanged.
     mcps = (
         []
-        if direct_model or builtin_names is not None
+        if closed_world or builtin_names is not None
         else await workspace.list_mcps()
     )
 

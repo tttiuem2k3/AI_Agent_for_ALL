@@ -14,6 +14,7 @@ from ._runtime import (
     AgentRuntimeProfile,
     DirectModelRuntimeProfile,
     RuntimeProfile,
+    WorkflowRuntimeProfile,
 )
 from ._credential import CredentialRecord
 from ._schedule import ScheduleData, ScheduleRecord, ScheduleSource
@@ -38,6 +39,7 @@ __all__ = [
     "AgentRuntimeProfile",
     "DirectModelRuntimeProfile",
     "RuntimeProfile",
+    "WorkflowRuntimeProfile",
     "SkillCapability",
     "ToolCapability",
     "CredentialRecord",

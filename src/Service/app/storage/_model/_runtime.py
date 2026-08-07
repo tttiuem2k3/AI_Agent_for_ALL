@@ -17,6 +17,30 @@ class AgentRuntimeProfile(BaseModel):
     agent_id: str = Field(min_length=1, max_length=100)
 
 
+class WorkflowRuntimeProfile(BaseModel):
+    """An Agent session driven by an ON AI Workflow node, not by a person.
+
+    Identical to :class:`AgentRuntimeProfile` in what it references — the same
+    persisted Agent, the same v1 base capabilities on the ``AgentRecord`` — and
+    different in exactly one respect: the turn is unattended, so the framework
+    must attach *nothing* the graph author did not choose.  ``get_toolkit``
+    reads this profile to skip the planner, background, schedule, team and MCP
+    blocks it otherwise attaches unconditionally.
+
+    Base capabilities deliberately are **not** duplicated here.  An Agent
+    session already carries them on its ``AgentRecord`` and ``_effective_tool_names``
+    already validates the effective manifest against that record; storing a
+    second copy on the profile would create two sources of truth for the same
+    fact.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: Literal["workflow"] = "workflow"
+    profile_version: Literal["1"] = "1"
+    agent_id: str = Field(min_length=1, max_length=100)
+
+
 class DirectModelRuntimeProfile(BaseModel):
     """Server-owned recipe for constructing an ephemeral runtime Agent."""
 
@@ -39,6 +63,6 @@ class DirectModelRuntimeProfile(BaseModel):
 
 
 RuntimeProfile = Annotated[
-    AgentRuntimeProfile | DirectModelRuntimeProfile,
+    AgentRuntimeProfile | WorkflowRuntimeProfile | DirectModelRuntimeProfile,
     Field(discriminator="kind"),
 ]

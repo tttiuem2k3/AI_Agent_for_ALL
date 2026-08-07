@@ -11,6 +11,7 @@ from ._runtime import (
     AgentRuntimeProfile,
     DirectModelRuntimeProfile,
     RuntimeProfile,
+    WorkflowRuntimeProfile,
 )
 from Runtime.state import AgentState
 
@@ -165,7 +166,9 @@ class SessionRecord(_RecordBase):
             self.runtime_profile = AgentRuntimeProfile(agent_id=self.agent_id)
             return self
 
-        if isinstance(profile, AgentRuntimeProfile):
+        if isinstance(profile, (AgentRuntimeProfile, WorkflowRuntimeProfile)):
+            # Workflow là phiên Agent không người trông — cùng ràng buộc danh
+            # tính, chỉ khác ở tập tool mà get_toolkit gắn.
             if self.agent_id != profile.agent_id:
                 raise ValueError("Agent runtime profile does not match agent_id")
             if self.runtime_subject_id is not None:
