@@ -122,6 +122,20 @@ class ERPXToolFactory:
         # here, so they need neither a gateway client nor a ToolType allowlist —
         # the executor plane is ON's decision, carried in ``executor_type``.
         external = [tool for tool in manifest.tools if tool.is_external_execution]
+        # ``Builtin`` means the runtime owns the Tool: it is loaded from the
+        # workspace and filtered by the same manifest. Building an external
+        # wrapper for it too would register two entries under one function name
+        # — one name, two behaviors, decided by iteration order. ERPX expresses
+        # "the runtime runs it" as executor_type='PythonRuntime', which is not
+        # external, so reaching this is bad data rather than a shape we support.
+        contradictory = [
+            tool.tool_id for tool in external if tool.tool_type == "Builtin"
+        ]
+        if contradictory:
+            raise ValueError(
+                "Builtin ERPX Tools cannot request external execution: "
+                f"{', '.join(contradictory)}.",
+            )
         # Tools the runtime still calls in-process through the curated gateway.
         # This is the legacy chat path and stays restricted to ``ServicesApi``:
         # nothing else has ever had a working in-process executor.

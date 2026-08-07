@@ -124,10 +124,10 @@ class ERPXExternalToolFactoryTest(IsolatedAsyncioTestCase):
         built, _ = await _build(
             [
                 _capability(
-                    tool_id="ASCOPE_READ",
-                    function_name="read_runtime",
-                    tool_type="Builtin",
-                    executor_type="PythonRuntime",
+                    tool_id="ERPX_OOF2111_CREATE_TASK",
+                    function_name="create_task",
+                    tool_type="ScreenAction",
+                    executor_type="ScreenAction",
                     is_external_execution=True,
                 ),
             ],
@@ -136,11 +136,34 @@ class ERPXExternalToolFactoryTest(IsolatedAsyncioTestCase):
         tool = built[0]
         self.assertIsInstance(tool, ERPXExternalTool)
         self.assertTrue(tool.is_external_tool)
-        self.assertEqual(tool.name, "read_runtime")
+        self.assertEqual(tool.name, "create_task")
         self.assertEqual(
             set(tool.input_schema["properties"]),
             {"query"},
         )
+
+    async def test_builtin_tool_claiming_external_execution_is_rejected(self) -> None:
+        """Mâu thuẫn phải nổ, không được im lặng.
+
+        ``Builtin`` nghĩa là chính runtime Python sở hữu và chạy Tool đó; nó đã
+        được nạp từ workspace và lọc theo manifest. Nếu factory lại dựng thêm
+        một bản external cho cùng Tool, toolkit có HAI mục trùng tên — model
+        thấy một tên, hai hành vi. ``executor_type='PythonRuntime'`` (tức không
+        external) là cách ERPX diễn đạt đúng ý này, nên tới được đây là dữ liệu
+        đã sai.
+        """
+        with self.assertRaises(ValueError):
+            await _build(
+                [
+                    _capability(
+                        tool_id="ASCOPE_READ",
+                        function_name="read_runtime",
+                        tool_type="Builtin",
+                        executor_type="ScreenAction",
+                        is_external_execution=True,
+                    ),
+                ],
+            )
 
     async def test_legacy_chat_tool_stays_in_process(self) -> None:
         built, _ = await _build(
@@ -166,10 +189,10 @@ class ERPXExternalToolFactoryTest(IsolatedAsyncioTestCase):
         built, _ = await _build(
             [
                 _capability(
-                    tool_id="ASCOPE_READ",
-                    function_name="read_runtime",
-                    tool_type="PythonRuntime",
-                    executor_type="PythonRuntime",
+                    tool_id="ERPX_OOF2111_CREATE_TASK",
+                    function_name="create_task",
+                    tool_type="ScreenAction",
+                    executor_type="ScreenAction",
                     is_external_execution=True,
                 ),
             ],
@@ -186,10 +209,10 @@ class ERPXExternalToolFactoryTest(IsolatedAsyncioTestCase):
         built, _ = await _build(
             [
                 _capability(
-                    tool_id="ASCOPE_READ",
-                    function_name="read_runtime",
-                    tool_type="Builtin",
-                    executor_type="PythonRuntime",
+                    tool_id="ERPX_OOF2111_CREATE_TASK",
+                    function_name="create_task",
+                    tool_type="ScreenAction",
+                    executor_type="ScreenAction",
                     is_external_execution=True,
                 ),
             ],
@@ -244,10 +267,10 @@ class ERPXExternalToolTurnTest(IsolatedAsyncioTestCase):
         built, client = await _build(
             [
                 _capability(
-                    tool_id="ASCOPE_READ",
-                    function_name="read_runtime",
-                    tool_type="Builtin",
-                    executor_type="PythonRuntime",
+                    tool_id="ERPX_OOF2111_CREATE_TASK",
+                    function_name="create_task",
+                    tool_type="ScreenAction",
+                    executor_type="ScreenAction",
                     is_external_execution=True,
                 ),
             ],
@@ -268,7 +291,7 @@ class ERPXExternalToolTurnTest(IsolatedAsyncioTestCase):
                         content=[
                             ToolCallBlock(
                                 id="call-1",
-                                name="read_runtime",
+                                name="create_task",
                                 input=tool_input,
                             ),
                         ],
@@ -279,7 +302,7 @@ class ERPXExternalToolTurnTest(IsolatedAsyncioTestCase):
                         content=[
                             ToolCallBlock(
                                 id="call-1",
-                                name="read_runtime",
+                                name="create_task",
                                 input=tool_input,
                             ),
                         ],
@@ -322,7 +345,7 @@ class ERPXExternalToolTurnTest(IsolatedAsyncioTestCase):
                     execution_results=[
                         ToolResultBlock(
                             id="call-1",
-                            name="read_runtime",
+                            name="create_task",
                             output=[TextBlock(text="ON đã chạy xong.")],
                             state=ToolResultState.SUCCESS,
                         ),
