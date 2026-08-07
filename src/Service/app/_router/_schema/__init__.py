@@ -25,6 +25,7 @@ from ._credential import (
     ListCredentialsResponse,
     ListCredentialSchemasResponse,
 )
+from ._tool_exec import ToolExecRequest, ToolExecResponse
 from ._session import (
     CancelSessionResponse,
     CreateSessionRequest,
@@ -76,4 +77,7 @@ __all__ = [
     "SessionView",
     "TeamDetailResponse",
     "TeamMemberView",
+    # Tool execution
+    "ToolExecRequest",
+    "ToolExecResponse",
 ]

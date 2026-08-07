@@ -5,6 +5,7 @@ from ._chat import chat_router
 from ._credential import credential_router
 from ._schedule import schedule_router
 from ._session import session_router
+from ._tool_exec import tool_exec_router
 from ._model import model_router
 from ._tts_model import tts_model_router
 from ._workspace import workspace_router
@@ -17,5 +18,6 @@ __all__ = [
     "credential_router",
     "schedule_router",
     "session_router",
+    "tool_exec_router",
     "workspace_router",
 ]
