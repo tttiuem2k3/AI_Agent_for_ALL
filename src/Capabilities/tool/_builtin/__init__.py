@@ -7,6 +7,7 @@ from ._edit import Edit
 from ._glob import Glob
 from ._grep import Grep
 from ._meta import ResetTools
+from ._powershell import PowerShell
 from ._read import Read
 from ._skill import SkillViewer
 from ._write import Write
@@ -18,6 +19,7 @@ __all__ = [
     "Edit",
     "Glob",
     "Grep",
+    "PowerShell",
     "Read",
     "Write",
     "BackendBase",

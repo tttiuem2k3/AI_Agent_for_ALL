@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field, model_validator
 
 from Capabilities.permission import PermissionMode
+from ..._service import SessionStatus
 from ...storage import (
     AgentRecord,
     ChatModelConfig,
@@ -259,3 +260,16 @@ class ListMessagesResponse(BaseModel):
     is_running: bool = Field(
         description="Whether the session is currently running.",
     )
+
+
+class SessionStatusResponse(BaseModel):
+    """Response for probing a session's high-level status."""
+
+    session_id: str = Field(description="The session that was probed.")
+    status: SessionStatus = Field(description="The unified session status.")
+
+
+class InterruptSessionResponse(BaseModel):
+    """Response for an idempotent interrupt request."""
+
+    session_id: str = Field(description="The interrupted session id.")

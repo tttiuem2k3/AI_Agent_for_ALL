@@ -30,7 +30,7 @@ from Common._utils._common import _generate_id
 from ..mcp import MCPClient
 from Runtime.message import Msg, ToolResultBlock
 from ..skill import Skill
-from Capabilities.tool import ToolBase
+from Capabilities.tool import BackendBase, ToolBase
 
 
 class WorkspaceBase:
@@ -57,6 +57,15 @@ class WorkspaceBase:
 
     is_alive: bool
     """If the workspace is still operational."""
+
+    @property
+    def _glob_helper_path(self) -> str | None:
+        """Optional backend-side path to the Glob helper script.
+
+        None lets the Glob builtin use its default local-backend behavior.
+        Remote backends may override this with a sandbox/container path.
+        """
+        return None
 
     def __init__(self, workspace_id: str | None) -> None:
         """Initialize the workspace base instance."""
@@ -102,6 +111,13 @@ class WorkspaceBase:
         self.is_alive = False
 
     # ── instructions ───────────────────────────────────────────────
+
+    def get_backend(self) -> BackendBase:
+        """Return the workspace's active filesystem/execution backend."""
+        backend = getattr(self, "_backend", None)
+        if backend is None:
+            raise RuntimeError("Workspace backend is not initialized.")
+        return backend
 
     @abstractmethod
     async def get_instructions(self) -> str:

@@ -36,13 +36,17 @@ from __future__ import annotations
 
 import asyncio
 import os
+import posixpath
 import shlex
 import shutil
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, AsyncIterator
 
 import aiofiles
+
+DEFAULT_READ_CHUNK_SIZE = 1024 * 1024
+_FIND_ENTRY_FORMAT = "%Y\t%s\t%T@\t%f\0"
 
 # ── data class ─────────────────────────────────────────────────────────
 
@@ -70,6 +74,15 @@ class ExecResult:
                 ``True`` iff the command exited with code ``0``.
         """
         return self.exit_code == 0
+
+@dataclass(frozen=True, slots=True)
+class DirEntry:
+    """One directory entry with metadata."""
+
+    name: str
+    is_dir: bool
+    size_bytes: int | None = None
+    mtime: float | None = None
 
 
 # ── helpers ────────────────────────────────────────────────────────────
@@ -110,7 +123,19 @@ class BackendBase(ABC):
     cheaper native path may override them (see :class:`LocalBackend`).
     """
 
+    _path_module = posixpath
+
     # ── abstract primitives ────────────────────────────────────────
+
+    def basename(self, path: str) -> str:
+        """Return the backend-native basename for *path*."""
+        return self._path_module.basename(path)
+
+    def abspath(self, path: str, *, cwd: str) -> str:
+        """Resolve *path* against *cwd* using backend path semantics."""
+        if self._path_module.isabs(path):
+            return self._path_module.normpath(path)
+        return self._path_module.normpath(self._path_module.join(cwd, path))
 
     @abstractmethod
     async def exec_shell(
@@ -174,6 +199,17 @@ class BackendBase(ABC):
         """
 
     # ── derived filesystem ops (shell-based defaults) ──────────────
+
+    async def read_stream(
+        self,
+        path: str,
+        *,
+        chunk_size: int = DEFAULT_READ_CHUNK_SIZE,
+    ) -> AsyncIterator[bytes]:
+        """Stream a file in bounded chunks."""
+        data = await self.read_file(path)
+        for offset in range(0, len(data), chunk_size):
+            yield data[offset : offset + chunk_size]
 
     async def file_exists(self, path: str) -> bool:
         """Return ``True`` if ``path`` exists (file or directory).
@@ -252,6 +288,73 @@ class BackendBase(ABC):
             for part in result.stdout.split(b"\0")
             if part
         ]
+
+    async def scandir(self, path: str) -> list[DirEntry]:
+        """List one directory level with each entry's metadata."""
+        return await self._find_entries(
+            [
+                "find",
+                path,
+                "-mindepth",
+                "1",
+                "-maxdepth",
+                "1",
+                "-printf",
+                _FIND_ENTRY_FORMAT,
+            ],
+        )
+
+    async def stat(self, path: str) -> DirEntry | None:
+        """Return one path's metadata, or ``None`` if unavailable."""
+        entries = await self._find_entries(
+            ["find", path, "-maxdepth", "0", "-printf", _FIND_ENTRY_FORMAT],
+            skip_unresolvable=True,
+        )
+        return entries[0] if entries else None
+
+    async def _find_entries(
+        self,
+        command: list[str],
+        *,
+        skip_unresolvable: bool = False,
+    ) -> list[DirEntry]:
+        result = await self.exec_shell(command)
+        if not result.ok():
+            return []
+
+        entries: list[DirEntry] = []
+        for record in result.stdout.split(b"\0"):
+            if not record:
+                continue
+            fields = record.decode("utf-8", errors="surrogateescape").split(
+                "\t",
+                3,
+            )
+            if len(fields) != 4:
+                continue
+            kind, raw_size, raw_mtime, name = fields
+            try:
+                size: int | None = int(raw_size)
+            except ValueError:
+                size = None
+            try:
+                mtime: float | None = float(raw_mtime)
+            except ValueError:
+                mtime = None
+            if kind in ("N", "L", "?"):
+                if skip_unresolvable:
+                    continue
+                size, mtime = None, None
+            is_dir = kind == "d"
+            entries.append(
+                DirEntry(
+                    name=name,
+                    is_dir=is_dir,
+                    size_bytes=None if is_dir else size,
+                    mtime=mtime,
+                ),
+            )
+        return entries
 
     async def stat_mtime(self, path: str) -> float | None:
         """Return the modification time of ``path``, or ``None``.
@@ -339,6 +442,8 @@ class LocalBackend(BackendBase):
     unavailable.
     """
 
+    _path_module = os.path
+
     async def exec_shell(
         self,
         command: list[str],
@@ -421,6 +526,20 @@ class LocalBackend(BackendBase):
         async with aiofiles.open(path, mode="rb") as f:
             return await f.read()
 
+    async def read_stream(
+        self,
+        path: str,
+        *,
+        chunk_size: int = DEFAULT_READ_CHUNK_SIZE,
+    ) -> AsyncIterator[bytes]:
+        """Stream a local file in bounded chunks."""
+        async with aiofiles.open(path, mode="rb") as f:
+            while True:
+                chunk = await f.read(chunk_size)
+                if not chunk:
+                    break
+                yield chunk
+
     async def write_file(self, path: str, data: bytes) -> None:
         """Write *data* to a local file, creating parent dirs.
 
@@ -491,6 +610,44 @@ class LocalBackend(BackendBase):
                     results.append(os.path.join(root, f))
             return results
         return os.listdir(path)
+
+    async def scandir(self, path: str) -> list[DirEntry]:
+        """List local directory entries with metadata."""
+        entries: list[DirEntry] = []
+        try:
+            with os.scandir(path) as it:
+                for entry in it:
+                    try:
+                        is_dir = entry.is_dir()
+                        info = entry.stat()
+                        size, mtime = info.st_size, info.st_mtime
+                    except OSError:
+                        is_dir, size, mtime = False, None, None
+                    entries.append(
+                        DirEntry(
+                            name=entry.name,
+                            is_dir=is_dir,
+                            size_bytes=None if is_dir else size,
+                            mtime=mtime,
+                        ),
+                    )
+        except OSError:
+            return []
+        return entries
+
+    async def stat(self, path: str) -> DirEntry | None:
+        """Return one local path's metadata."""
+        try:
+            info = os.stat(path)
+        except OSError:
+            return None
+        is_dir = os.path.isdir(path)
+        return DirEntry(
+            name=os.path.basename(path),
+            is_dir=is_dir,
+            size_bytes=None if is_dir else info.st_size,
+            mtime=info.st_mtime,
+        )
 
     async def stat_mtime(self, path: str) -> float | None:
         """Return the modification time of a local file.

@@ -1,13 +1,28 @@
 # -*- coding: utf-8 -*-
 """DM-2 contract tests for session-native DirectModel runtime."""
 import asyncio
+import sys
 from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock
+from types import SimpleNamespace
 
 import pytest
 import fakeredis.aioredis
 import httpx
 from pydantic import ValidationError
 
+from Capabilities.tool._builtin._bash_parser import BashCommandParser
+from Capabilities.tool._builtin._backend import ExecResult
+from Capabilities.tool._builtin._grep import Grep
+from Capabilities.tool import ToolBase, ToolChunk, ToolResponse, Toolkit
+from Capabilities.workspace import WorkspaceBase
+from Providers.credential import OpenAICredential
+from Providers.modelLLM.model import ChatResponse, FinishedReason
+from Providers.modelLLM.model._openai_chat import OpenAIChatModel
+from Runtime.message import TextBlock, ToolCallBlock, ToolResultState
+from Runtime.agent import Agent
+from Runtime.middleware import MiddlewareBase
+from Capabilities.permission import PermissionBehavior, PermissionDecision
 from Service.app._router._schema import (
     ChatRequest,
     CreateSessionRequest,
@@ -32,6 +47,100 @@ from Service.app.storage import (
     compute_capability_manifest_v2_hash,
 )
 from Service.app.storage._model._capability import ToolCapability
+
+
+def test_grep_rejects_negative_pagination_values() -> None:
+    async def _run() -> None:
+        grep = Grep()
+
+        head_limit_result = await grep.call(
+            pattern="needle",
+            head_limit=-1,
+        )
+        offset_result = await grep.call(
+            pattern="needle",
+            offset=-1,
+        )
+
+        assert head_limit_result.state == "error"
+        assert "head_limit must be non-negative" in (
+            head_limit_result.content[0].text
+        )
+        assert offset_result.state == "error"
+        assert "offset must be non-negative" in offset_result.content[0].text
+
+    asyncio.run(_run())
+
+
+def test_bash_parser_treats_mutating_find_as_not_read_only() -> None:
+    parser = BashCommandParser()
+
+    assert parser.is_read_only_command("find . -name '*.py'") is True
+    assert parser.is_read_only_command("find . -name '*.tmp' -delete") is False
+    assert parser.is_read_only_command(
+        r"find . -name '*.tmp' -exec rm {} \;",
+    ) is False
+
+
+def test_chat_response_defaults_finished_reason_per_instance() -> None:
+    first = ChatResponse(content=[], is_last=True)
+    second = ChatResponse(content=[], is_last=True)
+
+    assert first.finished_reason == FinishedReason.COMPLETED
+    assert second.finished_reason == FinishedReason.COMPLETED
+    first.finished_reason = FinishedReason.INTERRUPTED
+    assert second.finished_reason == FinishedReason.COMPLETED
+
+
+def test_openai_chat_uses_max_completion_tokens(monkeypatch) -> None:
+    captured: dict = {}
+
+    class _FakeCompletions:
+        async def create(self, **kwargs):
+            captured.update(kwargs)
+            return SimpleNamespace(choices=[], usage=None, id="resp-01")
+
+    class _FakeClient:
+        def __init__(self, **kwargs):
+            self.chat = SimpleNamespace(
+                completions=_FakeCompletions(),
+            )
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        SimpleNamespace(AsyncClient=_FakeClient),
+    )
+
+    async def _run() -> None:
+        model = OpenAIChatModel(
+            credential=OpenAICredential(api_key="secret"),
+            model="gpt-test",
+            parameters=OpenAIChatModel.Parameters(max_tokens=123),
+            stream=False,
+        )
+        await model._call_api("gpt-test", [])
+
+    asyncio.run(_run())
+
+    assert captured["max_completion_tokens"] == 123
+    assert "max_tokens" not in captured
+
+
+def test_tool_response_preserves_error_state_after_later_chunks() -> None:
+    response = ToolResponse()
+
+    response.append_chunk(ToolChunk(content=[], state=ToolResultState.ERROR))
+    response.append_chunk(ToolChunk(content=[], state=ToolResultState.DENIED))
+    response.append_chunk(
+        ToolChunk(content=[], state=ToolResultState.INTERRUPTED),
+    )
+
+    assert response.state == ToolResultState.ERROR
+
+
+def test_workspace_base_default_glob_helper_path_is_none() -> None:
+    assert WorkspaceBase._glob_helper_path.fget(object()) is None
 
 
 def _manifest_v2(
@@ -64,6 +173,122 @@ def _direct_profile(
     return DirectModelRuntimeProfile(
         base_capabilities=_manifest_v2(subject_id=subject_id),
     )
+
+
+
+def test_powershell_tool_encodes_command_and_asks_permission() -> None:
+    from Capabilities.tool import PowerShell
+
+    async def _run() -> None:
+        backend = AsyncMock()
+        backend.exec_shell.side_effect = [
+            ExecResult(0, b"", b""),
+            ExecResult(0, b"ok\r\n", b""),
+        ]
+        tool = PowerShell(cwd="workspace", backend=backend)
+
+        decision = await tool.check_permissions({}, None)
+        assert decision.behavior == PermissionBehavior.ASK
+        assert await tool.generate_suggestions({}) == []
+
+        chunks = [
+            chunk
+            async for chunk in await tool(
+                command="Write-Output 'ok'",
+                description="test command",
+                timeout=700000,
+            )
+        ]
+
+        assert chunks[0].content[0].text == "ok\n"
+        assert chunks[0].is_last is True
+        assert backend.exec_shell.await_args_list[1].kwargs["cwd"] == "workspace"
+        assert backend.exec_shell.await_args_list[1].kwargs["timeout"] == 600.0
+        argv = backend.exec_shell.await_args_list[1].args[0]
+        assert argv[:4] == ["pwsh", "-NoLogo", "-NoProfile", "-NonInteractive"]
+        assert "-EncodedCommand" in argv
+
+    asyncio.run(_run())
+
+
+def test_agent_on_check_permission_middleware_can_deny_before_engine() -> None:
+    class _FakeModel:
+        model = "fake"
+        context_size = 8192
+
+    class _Tool(ToolBase):
+        name = "guarded"
+        description = "guarded tool"
+        input_schema = {"type": "object", "properties": {}, "required": []}
+        is_read_only = False
+        is_concurrency_safe = True
+
+        async def check_permissions(self, tool_input, context):
+            return PermissionDecision(
+                behavior=PermissionBehavior.ALLOW,
+                message="tool allowed",
+            )
+
+        async def call(self):
+            return ToolResponse(
+                content=[TextBlock(text="should not execute")],
+                state=ToolResultState.SUCCESS,
+            )
+
+    class _DenyMiddleware(MiddlewareBase):
+        async def on_check_permission(self, agent, input_kwargs, next_handler):
+            return PermissionDecision(
+                behavior=PermissionBehavior.DENY,
+                message="blocked by middleware",
+            )
+
+    async def _run() -> None:
+        tool = _Tool()
+        agent = Agent(
+            name="agent",
+            system_prompt="prompt",
+            model=_FakeModel(),
+            toolkit=Toolkit(tools=[tool]),
+            middlewares=[_DenyMiddleware()],
+        )
+        engine = AsyncMock(
+            return_value=PermissionDecision(
+                behavior=PermissionBehavior.ALLOW,
+                message="allowed",
+            ),
+        )
+        agent._engine.check_permission = engine
+
+        decision = await agent._check_permission(
+            ToolCallBlock(id="call-1", name="guarded", input="{}"),
+            tool,
+            {},
+        )
+
+        assert decision.behavior == PermissionBehavior.DENY
+        assert decision.message == "blocked by middleware"
+        engine.assert_not_awaited()
+
+    asyncio.run(_run())
+
+
+def test_workspace_router_exposes_artifact_routes() -> None:
+    from Service.app._router import workspace_router
+
+    routes = {(route.path, tuple(sorted(route.methods))) for route in workspace_router.routes}
+
+    assert ("/workspace/files/dir", ("GET",)) in routes
+    assert ("/workspace/files", ("GET",)) in routes
+    assert ("/workspace/files/token", ("POST",)) in routes
+
+
+def test_session_router_exposes_status_and_interrupt_routes() -> None:
+    from Service.app._router import session_router
+
+    routes = {(route.path, tuple(sorted(route.methods))) for route in session_router.routes}
+
+    assert ("/sessions/{session_id}/status", ("GET",)) in routes
+    assert ("/sessions/{session_id}/interrupt", ("POST",)) in routes
 
 
 def test_legacy_agent_session_gets_runtime_profile() -> None:

@@ -170,6 +170,9 @@ class Agent:
         self._reasoning_middlewares = [
             _ for _ in middlewares if _.is_implemented("on_reasoning")
         ]
+        self._check_permission_middlewares = [
+            _ for _ in middlewares if _.is_implemented("on_check_permission")
+        ]
         self._acting_middlewares = [
             _ for _ in middlewares if _.is_implemented("on_acting")
         ]
@@ -286,7 +289,10 @@ class Agent:
                     input_kwargs = {"context_config": context_config}
 
                     async def next_handler(**kwargs: Any) -> None:
-                        await execute_chain(index + 1, **kwargs)
+                        await execute_chain(
+                            index + 1,
+                            **{**input_kwargs, **kwargs},
+                        )
 
                     await mw.on_compress_context(
                         agent=self,
@@ -525,7 +531,10 @@ class Agent:
                     async def next_handler(
                         **kwargs: Any,
                     ) -> AsyncGenerator[AgentEvent | Msg, None]:
-                        async for item in execute_chain(index + 1, **kwargs):
+                        async for item in execute_chain(
+                            index + 1,
+                            **{**input_kwargs, **kwargs},
+                        ):
                             yield item
 
                     async for item in mw.on_reply(
@@ -738,7 +747,10 @@ class Agent:
                     input_kwargs = {"tool_choice": tool_choice}
 
                     async def next_handler(**kwargs: Any) -> AsyncGenerator:
-                        async for item in execute_chain(index + 1, **kwargs):
+                        async for item in execute_chain(
+                            index + 1,
+                            **{**input_kwargs, **kwargs},
+                        ):
                             yield item
 
                     async for item in mw.on_reasoning(
@@ -863,9 +875,18 @@ class Agent:
             completed_response.usage,
         )
 
+        # A thinking-only response is an intermediate reasoning step rather
+        # than a user-visible final answer. Keep the ReAct loop running so the
+        # model can produce text, data, or a tool call on the next iteration.
+        has_only_thinking_blocks = bool(completed_response.content) and all(
+            isinstance(block, ThinkingBlock)
+            for block in completed_response.content
+        )
+
         # If no tool call is generated, return the final message directly
-        if not any(
-            isinstance(_, ToolCallBlock) for _ in completed_response.content
+        if not has_only_thinking_blocks and not any(
+            isinstance(block, ToolCallBlock)
+            for block in completed_response.content
         ):
             last_ctx = self._get_last_msg()
             final_usage = (
@@ -1374,17 +1395,11 @@ class Agent:
         # ===================================================================
         # Step 2: Check permission by toolkit and permission engine
         # ===================================================================
-        if tool_call.state == ToolCallState.ALLOWED:
-            # Already allowed by user confirmation, skip permission checking
-            decision = PermissionDecision(
-                behavior=PermissionBehavior.ALLOW,
-                message="Already allowed by user confirmation.",
-            )
-        else:
-            decision = await self._engine.check_permission(
-                tool,
-                parsed_input,
-            )
+        decision = await self._check_permission(
+            tool_call,
+            tool,
+            parsed_input,
+        )
 
         # ===================================================================
         # Step 3: Handle the permission and execute the tool call if allowed
@@ -1548,6 +1563,71 @@ class Agent:
             f"Invalid permission decision behavior: {decision.behavior}",
         )
 
+    async def _check_permission(
+        self,
+        tool_call: ToolCallBlock,
+        tool: Any,
+        tool_input: dict[str, Any],
+    ) -> PermissionDecision:
+        """Run permission resolution through the middleware onion."""
+        if not self._check_permission_middlewares:
+            return await self._check_permission_impl(
+                tool_call,
+                tool,
+                tool_input,
+            )
+
+        copied_tool_call = deepcopy(tool_call)
+        copied_tool_input = deepcopy(tool_input)
+
+        async def execute_chain(
+            index: int = 0,
+            tool_call: ToolCallBlock = copied_tool_call,
+            tool: Any = tool,
+            tool_input: dict[str, Any] = copied_tool_input,
+        ) -> PermissionDecision:
+            if index >= len(self._check_permission_middlewares):
+                return await self._check_permission_impl(
+                    tool_call,
+                    tool,
+                    tool_input,
+                )
+
+            middleware = self._check_permission_middlewares[index]
+            input_kwargs = {
+                "tool_call": tool_call,
+                "tool": tool,
+                "tool_input": tool_input,
+            }
+
+            async def next_handler(**kwargs: Any) -> PermissionDecision:
+                return await execute_chain(
+                    index + 1,
+                    **{**input_kwargs, **kwargs},
+                )
+
+            return await middleware.on_check_permission(
+                agent=self,
+                input_kwargs=input_kwargs,
+                next_handler=next_handler,
+            )
+
+        return await execute_chain()
+
+    async def _check_permission_impl(
+        self,
+        tool_call: ToolCallBlock,
+        tool: Any,
+        tool_input: dict[str, Any],
+    ) -> PermissionDecision:
+        """Preserve the existing built-in permission behavior."""
+        if tool_call.state == ToolCallState.ALLOWED:
+            return PermissionDecision(
+                behavior=PermissionBehavior.ALLOW,
+                message="Already allowed by user confirmation.",
+            )
+        return await self._engine.check_permission(tool, tool_input)
+
     async def _acting(
         self,
         tool_call: ToolCallBlock,
@@ -1586,7 +1666,10 @@ class Agent:
                     input_kwargs = {"tool_call": tool_call}
 
                     async def next_handler(**kwargs: Any) -> AsyncGenerator:
-                        async for item in execute_chain(index + 1, **kwargs):
+                        async for item in execute_chain(
+                            index + 1,
+                            **{**input_kwargs, **kwargs},
+                        ):
                             yield item
 
                     async for item in mw.on_acting(
@@ -2122,7 +2205,7 @@ class Agent:
                                     # pylint: disable=cell-var-from-loop
                                     return await execute_chain(
                                         index + 1,
-                                        **kwargs,
+                                        **{**input_kwargs, **kwargs},
                                     )
 
                                 return await mw.on_model_call(

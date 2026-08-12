@@ -16,10 +16,12 @@ from ..deps import (
 )
 from ._schema import (
     CancelSessionResponse,
+    InterruptSessionResponse,
     CreateSessionRequest,
     CreateSessionResponse,
     ListMessagesResponse,
     ListSessionsResponse,
+    SessionStatusResponse,
     SessionView,
     TeamDetailResponse,
     TeamMemberView,
@@ -159,6 +161,37 @@ async def cancel_session_run(
         session_id=session_id,
         status="cancelled" if cancelled else "cancel_requested",
     )
+
+
+@session_router.post(
+    "/{session_id}/interrupt",
+    response_model=InterruptSessionResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    summary="Interrupt the active or parked run for a session",
+)
+async def interrupt_session(
+    session_id: str,
+    agent_id: str | None = Query(default=None),
+    runtime_subject_id: str | None = Query(default=None),
+    user_id: str = Depends(get_current_user_id),
+    storage: StorageBase = Depends(get_storage),
+    service: SessionService = Depends(get_session_service),
+) -> InterruptSessionResponse:
+    """Request interruption without changing the existing cancel route."""
+    existing = await _get_owned_session(
+        storage,
+        user_id,
+        session_id,
+        agent_id,
+        runtime_subject_id,
+    )
+    if existing is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found.",
+        )
+    await service.cancel_session_run(session_id)
+    return InterruptSessionResponse(session_id=session_id)
 
 
 async def _ensure_credential_exists(
@@ -700,6 +733,36 @@ async def list_messages(
         is_running=await message_bus.is_locked(
             MessageBusKeys.session_lock(session_id),
         ),
+    )
+
+
+@session_router.get(
+    "/{session_id}/status",
+    response_model=SessionStatusResponse,
+    summary="Probe the session's high-level status",
+)
+async def get_session_status(
+    session_id: str,
+    agent_id: str | None = Query(default=None),
+    runtime_subject_id: str | None = Query(default=None),
+    user_id: str = Depends(get_current_user_id),
+    service: SessionService = Depends(get_session_service),
+) -> SessionStatusResponse:
+    """Return running, idle, permission-waiting, or external-waiting."""
+    session_status = await service.get_session_status(
+        user_id,
+        session_id,
+        agent_id=agent_id,
+        runtime_subject_id=runtime_subject_id,
+    )
+    if session_status is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Session '{session_id}' not found.",
+        )
+    return SessionStatusResponse(
+        session_id=session_id,
+        status=session_status,
     )
 
 

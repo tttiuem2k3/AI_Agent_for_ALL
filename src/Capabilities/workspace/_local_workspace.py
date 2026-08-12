@@ -9,6 +9,7 @@ import mimetypes
 import os
 import re
 import shutil
+import sys
 from copy import deepcopy
 from pathlib import Path
 from typing import TypedDict
@@ -32,6 +33,7 @@ from Capabilities.tool import (
     Edit,
     Glob,
     Grep,
+    PowerShell,
     Read,
     ToolBase,
     Write,
@@ -663,8 +665,14 @@ class LocalWorkspace(WorkspaceBase):
         Returns the six builtin tools (Bash, Read, Write, Edit, Grep,
         Glob), each backed by the workspace's :class:`LocalBackend`.
         """
+        shell_tool: ToolBase
+        if sys.platform == "win32":
+            shell_tool = PowerShell(cwd=self.workdir, backend=self._backend)
+        else:
+            shell_tool = Bash(cwd=self.workdir, backend=self._backend)
+
         return [
-            Bash(cwd=self.workdir, backend=self._backend),
+            shell_tool,
             Edit(backend=self._backend),
             Glob(backend=self._backend),
             Grep(backend=self._backend),

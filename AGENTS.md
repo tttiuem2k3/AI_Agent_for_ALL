@@ -1,4 +1,4 @@
-# Repository Guidelines
+# Repository Guidelines 
 
 ## Project Structure & Module Organization
 

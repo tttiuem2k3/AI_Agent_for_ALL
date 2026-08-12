@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 """Generate the ERPX P0 assignable-tool manifest and SQL artifacts.
 
 The Python runtime is the source of truth for FunctionName,

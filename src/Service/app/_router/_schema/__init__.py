@@ -28,11 +28,13 @@ from ._credential import (
 from ._tool_exec import ToolExecRequest, ToolExecResponse
 from ._session import (
     CancelSessionResponse,
+    InterruptSessionResponse,
     CreateSessionRequest,
     CreateSessionResponse,
     UpdateSessionRequest,
     ListSessionsResponse,
     ListMessagesResponse,
+    SessionStatusResponse,
     SessionView,
     TeamDetailResponse,
     TeamMemberView,
@@ -69,11 +71,13 @@ __all__ = [
     "UpdateScheduleRequest",
     # Session
     "CancelSessionResponse",
+    "InterruptSessionResponse",
     "CreateSessionRequest",
     "CreateSessionResponse",
     "UpdateSessionRequest",
     "ListSessionsResponse",
     "ListMessagesResponse",
+    "SessionStatusResponse",
     "SessionView",
     "TeamDetailResponse",
     "TeamMemberView",

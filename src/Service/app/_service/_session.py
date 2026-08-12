@@ -46,6 +46,7 @@ component that touches both in the same call. Storage code never
 imports the bus; bus code never imports storage.
 """
 import asyncio
+from enum import Enum
 from typing import TYPE_CHECKING
 
 from ..message_bus import MessageBus, MessageBusKeys
@@ -53,9 +54,19 @@ from ..storage import StorageBase
 from ._session_projection import SessionProjection
 from ._projectors import SubagentHitlProjector
 from _logging import logger
+from Runtime.message import ToolCallState
 
 if TYPE_CHECKING:
     from ..workspace_manager import WorkspaceManagerBase
+
+
+class SessionStatus(str, Enum):
+    """High-level session state exposed to clients."""
+
+    RUNNING = "running"
+    IDLE = "idle"
+    AWAITING_PERMISSION = "awaiting_permission"
+    AWAITING_EXTERNAL_RESULT = "awaiting_external_result"
 
 
 class SessionService:
@@ -97,6 +108,51 @@ class SessionService:
         self._bus = message_bus
         self._workspace_manager = workspace_manager
         self._projection = SessionProjection(message_bus)
+
+    async def get_session_status(
+        self,
+        user_id: str,
+        session_id: str,
+        *,
+        agent_id: str | None = None,
+        runtime_subject_id: str | None = None,
+    ) -> SessionStatus | None:
+        """Return cluster liveness or the persisted parked state."""
+        if bool(agent_id) == bool(runtime_subject_id):
+            return None
+        if await self._bus.is_locked(MessageBusKeys.session_lock(session_id)):
+            return SessionStatus.RUNNING
+
+        session = await self._storage.get_session(
+            user_id,
+            agent_id,
+            session_id,
+        )
+        if session is None:
+            return None
+        if (
+            runtime_subject_id is not None
+            and session.runtime_subject_id != runtime_subject_id
+        ):
+            return None
+        return self.derive_parked_status(session.state.context)
+
+    @staticmethod
+    def derive_parked_status(context: list) -> SessionStatus:
+        """Derive an idle/HITL/external state from the context tail."""
+        if not context:
+            return SessionStatus.IDLE
+        last_msg = context[-1]
+        if last_msg.role != "assistant":
+            return SessionStatus.IDLE
+        tool_calls = last_msg.get_content_blocks("tool_call")
+        if not tool_calls:
+            return SessionStatus.IDLE
+        if any(call.state == ToolCallState.ASKING for call in tool_calls):
+            return SessionStatus.AWAITING_PERMISSION
+        if any(call.state == ToolCallState.SUBMITTED for call in tool_calls):
+            return SessionStatus.AWAITING_EXTERNAL_RESULT
+        return SessionStatus.IDLE
 
     # ------------------------------------------------------------------
     # Cancel

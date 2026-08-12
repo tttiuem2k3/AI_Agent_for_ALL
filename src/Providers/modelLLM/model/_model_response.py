@@ -2,6 +2,7 @@
 """The model response module."""
 from dataclasses import dataclass, field
 from datetime import datetime
+from enum import StrEnum
 from typing import Literal, Sequence
 
 from ._model_usage import ChatUsage
@@ -14,6 +15,16 @@ from Runtime.message import (
     DataBlock,
 )
 from Common.types import JSONSerializableObject
+
+
+class FinishedReason(StrEnum):
+    """The finished reason of the model response."""
+
+    INTERRUPTED = "interrupted"
+    """The model response is interrupted by cancellation."""
+
+    COMPLETED = "completed"
+    """The model response is completed."""
 
 
 @dataclass
@@ -41,6 +52,11 @@ class ChatResponse(DictMixin):
 
     usage: ChatUsage | None = field(default_factory=lambda: None)
     """The usage information of the chat response, if available."""
+
+    finished_reason: FinishedReason = field(
+        default_factory=lambda: FinishedReason.COMPLETED,
+    )
+    """The finished reason of the chat response when is_last is True."""
 
     metadata: dict[str, JSONSerializableObject] = field(
         default_factory=lambda: {},

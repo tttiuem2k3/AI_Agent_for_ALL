@@ -1,8 +1,0 @@
-INFO:     127.0.0.1:56131 - "GET /sessions/43502df2b7a244378e9d5be3de77a37f/stream?runtime_subject_id=dm_ff0e566f85a94d05b4c1cb29114a1f46 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56133 - "PATCH /sessions/43502df2b7a244378e9d5be3de77a37f?runtime_subject_id=dm_ff0e566f85a94d05b4c1cb29114a1f46 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:56133 - "POST /chat/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57393 - "PATCH /sessions/43502df2b7a244378e9d5be3de77a37f?runtime_subject_id=dm_ff0e566f85a94d05b4c1cb29114a1f46 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57393 - "POST /chat/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57408 - "PATCH /sessions/43502df2b7a244378e9d5be3de77a37f?runtime_subject_id=dm_ff0e566f85a94d05b4c1cb29114a1f46 HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57408 - "POST /chat/ HTTP/1.1" 200 OK
-INFO:     127.0.0.1:57408 - "POST /chat/ HTTP/1.1" 200 OK

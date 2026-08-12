@@ -5,6 +5,7 @@ from typing import AsyncGenerator, Awaitable, Callable, TYPE_CHECKING
 from Capabilities.tool import ToolBase
 
 if TYPE_CHECKING:
+    from Capabilities.permission import PermissionDecision
     from Runtime.agent import Agent
     from Providers.modelLLM.model import ChatResponse
 
@@ -156,6 +157,23 @@ class MiddlewareBase:  # pylint: disable=unused-argument
             f"{type(self).__name__} does not implement on_acting",
         )
         yield  # pylint: disable=unreachable
+
+    async def on_check_permission(
+        self,
+        agent: "Agent",
+        input_kwargs: dict,
+        next_handler: Callable[..., Awaitable["PermissionDecision"]],
+    ) -> "PermissionDecision":
+        """Intercept permission checking for one validated tool call.
+
+        Middleware may delegate with ``next_handler(**input_kwargs)``,
+        replace the returned decision, or short-circuit with its own decision.
+        The agent supplies copies of the tool call and parsed input so
+        middleware changes cannot alter the eventual tool invocation.
+        """
+        raise RuntimeError(
+            f"{type(self).__name__} does not implement on_check_permission",
+        )
 
     async def on_model_call(
         self,

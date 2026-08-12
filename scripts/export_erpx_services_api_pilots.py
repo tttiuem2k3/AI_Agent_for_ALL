@@ -1,4 +1,4 @@
-# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*- 
 """Generate the two curated ERPX ServicesApi pilot catalog rows."""
 from __future__ import annotations
 
