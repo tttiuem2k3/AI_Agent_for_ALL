@@ -1,0 +1,12 @@
+2026-08-07 13:33:43,721 DEBUG - Starting WinSW in console mode
+2026-08-07 13:33:44,133 DEBUG - Starting WinSW in console mode
+2026-08-07 13:33:44,153 INFO  - Installing service 'ASOFT AI Python Service (AsoftAiPythonService)'...
+2026-08-07 13:33:44,170 INFO  - Service 'ASOFT AI Python Service (AsoftAiPythonService)' was installed successfully.
+2026-08-07 13:33:46,897 DEBUG - Starting WinSW in console mode
+2026-08-07 13:33:47,316 DEBUG - Starting WinSW in console mode
+2026-08-07 13:33:47,340 INFO  - Starting service 'ASOFT AI Python Service (AsoftAiPythonService)'...
+2026-08-07 13:33:47,577 DEBUG - Starting WinSW in service mode
+2026-08-07 13:33:47,596 INFO  - Service 'ASOFT AI Python Service (AsoftAiPythonService)' started successfully.
+2026-08-07 13:33:47,674 INFO  - Starting D:\WORKS\00.ASOFT_ERPX_CORES_2025\03.AI ERPX\.venv\Scripts\python.exe "D:\WORKS\00.ASOFT_ERPX_CORES_2025\03.AI ERPX\service\main.py"
+2026-08-07 13:33:47,724 INFO  - Started process 275892
+2026-08-07 13:33:47,737 DEBUG - Forwarding logs of the process System.Diagnostics.Process (python) to WinSW.SizeBasedRollingLogAppender
