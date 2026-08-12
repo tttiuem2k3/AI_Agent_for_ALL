@@ -2,6 +2,8 @@
 """ASOFT AI Services app factory."""
 from typing import Type, TYPE_CHECKING, Any
 
+from fastapi.middleware.cors import CORSMiddleware
+
 from ._lifespan import lifespan
 from .workspace_manager import WorkspaceManagerBase
 from ._router import (
@@ -137,6 +139,19 @@ def create_app(
         CredentialFactory.register_credential(cls)
 
     app = FastAPI(title=title, version=version, lifespan=lifespan)
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origin_regex=(
+            r"^https?://(?:localhost|127\.0\.0\.1|"
+            r"10(?:\.\d{1,3}){3}|"
+            r"192\.168(?:\.\d{1,3}){2}|"
+            r"172\.(?:1[6-9]|2\d|3[01])(?:\.\d{1,3}){2})"
+            r"(?::\d+)?$"
+        ),
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
     # Attach shared state that lifespan and dependencies read from app.state
     app.state.storage = storage
