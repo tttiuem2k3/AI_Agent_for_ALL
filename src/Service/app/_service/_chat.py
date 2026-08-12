@@ -51,6 +51,7 @@ from Runtime.event import (
     RunErrorEvent,
     ReplyStartEvent,
     UserConfirmResultEvent,
+    UserInterruptEvent,
     ExternalExecutionResultEvent,
 )
 from Runtime.message import AssistantMsg, Msg, ToolCallState
@@ -161,6 +162,7 @@ class ChatService:
         input_msg: Msg
         | list[Msg]
         | UserConfirmResultEvent
+        | UserInterruptEvent
         | ExternalExecutionResultEvent
         | None = None,
     ) -> None:
@@ -303,6 +305,7 @@ class ChatService:
         input_msg: Msg
         | list[Msg]
         | UserConfirmResultEvent
+        | UserInterruptEvent
         | ExternalExecutionResultEvent
         | None,
     ) -> None:

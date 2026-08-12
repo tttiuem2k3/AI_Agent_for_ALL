@@ -31,7 +31,11 @@ from typing import TYPE_CHECKING, Self
 from pydantic import TypeAdapter
 
 from _logging import logger
-from Runtime.event import UserConfirmResultEvent, ExternalExecutionResultEvent
+from Runtime.event import (
+    ExternalExecutionResultEvent,
+    UserConfirmResultEvent,
+    UserInterruptEvent,
+)
 from ..message_bus import MessageBusKeys
 from .._bus_ops import enqueue_run_trigger
 
@@ -44,7 +48,7 @@ if TYPE_CHECKING:
 # Parses a queued ``resume`` input dict back into its concrete event,
 # discriminated by the ``type`` field shared by both result events.
 _RESUME_INPUT_ADAPTER: TypeAdapter = TypeAdapter(
-    UserConfirmResultEvent | ExternalExecutionResultEvent,
+    UserConfirmResultEvent | ExternalExecutionResultEvent | UserInterruptEvent,
 )
 
 # Delay before re-queuing a ``resume`` trigger whose target session is
@@ -231,7 +235,12 @@ class WakeupDispatcher:
         # Parse the resume input early so every downstream path
         # (lock-retry, spawn-retry) receives a typed event object
         # rather than a raw dict.
-        input_msg: UserConfirmResultEvent | ExternalExecutionResultEvent | None
+        input_msg: (
+            UserConfirmResultEvent
+            | ExternalExecutionResultEvent
+            | UserInterruptEvent
+            | None
+        )
         input_msg = None
         if is_resume:
             if raw_input is None:
@@ -342,6 +351,7 @@ class WakeupDispatcher:
         runtime_subject_id: str | None,
         input_msg: UserConfirmResultEvent
         | ExternalExecutionResultEvent
+        | UserInterruptEvent
         | None,
     ) -> None:
         """Re-enqueue a ``resume`` trigger after a short backoff.

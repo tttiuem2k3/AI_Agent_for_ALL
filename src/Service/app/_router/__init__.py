@@ -9,6 +9,7 @@ from ._tool_exec import tool_exec_router
 from ._model import model_router
 from ._tts_model import tts_model_router
 from ._workspace import workspace_router
+from ._health import health_router
 
 __all__ = [
     "agent_router",
@@ -20,4 +21,5 @@ __all__ = [
     "session_router",
     "tool_exec_router",
     "workspace_router",
+    "health_router",
 ]

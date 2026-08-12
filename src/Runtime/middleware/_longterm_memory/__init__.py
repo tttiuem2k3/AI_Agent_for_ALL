@@ -12,6 +12,7 @@ re-exported here.
 """
 
 from ._mem0 import Mem0Middleware
+from ._reme import ReMeMiddleware
 from ._mem0._asoft_adapter import (
     ASOFTEmbedding,
     ASOFTLLM,
@@ -24,6 +25,7 @@ __all__ = [
     "ASOFTEmbedding",
     "ASOFTLLM",
     "Mem0Middleware",
+    "ReMeMiddleware",
     "_convert_messages_to_asoft",
     "_parse_chat_response",
     "build_mem0_config",

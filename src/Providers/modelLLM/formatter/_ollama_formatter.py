@@ -2,7 +2,6 @@
 """The Ollama formatter module."""
 import base64
 import fnmatch
-import json
 from abc import ABC
 from typing import Any
 
@@ -11,6 +10,7 @@ from pydantic import Field
 
 from ._formatter_base import FormatterBase
 from _logging import logger
+from Common._utils._common import _json_loads_with_repair
 from Runtime.message import (
     Msg,
     TextBlock,
@@ -198,7 +198,7 @@ class OllamaChatFormatter(_OllamaFormatterBase):
                                         "name": block.name,
                                         # Ollama SDK expects a dict, not a
                                         # JSON string.
-                                        "arguments": json.loads(
+                                        "arguments": _json_loads_with_repair(
                                             block.input or "{}",
                                         ),
                                     },
@@ -231,6 +231,7 @@ class OllamaChatFormatter(_OllamaFormatterBase):
                     messages.append(
                         {
                             "role": "tool",
+                            "tool_name": block.name,
                             "content": textual_output,
                         },
                     )

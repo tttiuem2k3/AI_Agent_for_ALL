@@ -27,6 +27,7 @@ if TYPE_CHECKING:
     from Runtime.event import (
         ExternalExecutionResultEvent,
         UserConfirmResultEvent,
+        UserInterruptEvent,
     )
 
 
@@ -75,6 +76,7 @@ async def enqueue_run_trigger(
     kind: Literal["wake", "resume"] = MessageBusKeys.WAKEUP_KIND_WAKE,
     inputs: UserConfirmResultEvent
     | ExternalExecutionResultEvent
+    | UserInterruptEvent
     | None = None,
 ) -> None:
     """Enqueue a typed run trigger and signal dispatchers.

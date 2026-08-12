@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 """The agent config classes."""
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 from Providers.modelLLM.model import ChatModelBase
 
@@ -131,6 +131,9 @@ class ReActConfig(BaseModel):
     )
     """The maximum number of iterations for the reasoning-acting loop."""
 
+    structured_output_grace_iters: int = Field(default=5, gt=0)
+    """Extra iterations reserved for additive structured-output flows."""
+
     stop_on_reject: bool = Field(
         title="Rejection Handling",
         default=False,
@@ -140,6 +143,30 @@ class ReActConfig(BaseModel):
     """If stop reasoning when tool call(s) are rejected. If `True`, the agent
     won't continue reasoning and wait for outside interaction from the user.
     """
+
+class InjectionConfig(BaseModel):
+    """Optional runtime/environment state injection configuration."""
+
+    inject_runtime_state: bool = False
+    timezone: str = "UTC"
+    time_format: str = "%Y-%m-%dT%H:%M:%S"
+    template: str = (
+        "<system-reminder>Treat the following as current runtime state:\n"
+        "{runtime_state}\n</system-reminder>"
+    )
+    injection_source: str = (
+        '{"label": "System", "sublabel": "Runtime State"}'
+    )
+    extra_fields: dict[str, str] = Field(default_factory=dict)
+
+    @field_validator("template")
+    @classmethod
+    def _validate_template(cls, value: str) -> str:
+        if "{runtime_state}" not in value:
+            raise ValueError(
+                "The injection template must contain '{runtime_state}'.",
+            )
+        return value
 
 
 class ModelConfig(BaseModel):

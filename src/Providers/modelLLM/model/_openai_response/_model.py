@@ -129,6 +129,20 @@ class OpenAIResponseModel(ChatModelBase):
         )
         self.formatter = formatter or OpenAIResponseFormatter()
         self.client_kwargs = client_kwargs or {}
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        """Return one lazily-created client for this model instance."""
+        if self._client is None:
+            import openai
+
+            self._client = openai.AsyncClient(
+                api_key=self.credential.api_key.get_secret_value(),
+                organization=self.credential.organization,
+                base_url=self.credential.base_url,
+                **self.client_kwargs,
+            )
+        return self._client
 
     @classmethod
     def _get_retryable_exceptions(cls) -> tuple[Type[Exception], ...]:
@@ -169,16 +183,7 @@ class OpenAIResponseModel(ChatModelBase):
                 generator of ``ChatResponse`` objects when streaming is
                 enabled.
         """
-        import openai
-
-        client = openai.AsyncClient(
-            **{
-                "api_key": self.credential.api_key.get_secret_value(),
-                "organization": self.credential.organization,
-                "base_url": self.credential.base_url,
-                **self.client_kwargs,
-            },
-        )
+        client = self._get_client()
 
         formatted_messages = await self.formatter.format(messages)
 

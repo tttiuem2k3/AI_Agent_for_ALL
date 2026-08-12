@@ -105,6 +105,19 @@ class AnthropicChatModel(ChatModelBase):
         )
         self.formatter = formatter or AnthropicChatFormatter()
         self.client_kwargs = client_kwargs or {}
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        """Return one lazily-created client for this model instance."""
+        if self._client is None:
+            import anthropic
+
+            self._client = anthropic.AsyncAnthropic(
+                api_key=self.credential.api_key.get_secret_value(),
+                base_url=self.credential.base_url,
+                **self.client_kwargs,
+            )
+        return self._client
 
     @classmethod
     def _get_retryable_exceptions(cls) -> tuple[Type[Exception], ...]:
@@ -148,15 +161,7 @@ class AnthropicChatModel(ChatModelBase):
                 enabled.
         """
 
-        import anthropic
-
-        client = anthropic.AsyncAnthropic(
-            **{
-                "api_key": self.credential.api_key.get_secret_value(),
-                "base_url": self.credential.base_url,
-                **self.client_kwargs,
-            },
-        )
+        client = self._get_client()
 
         # Anthropic requires max_tokens; fall back to a safe default when
         # the user hasn't configured one explicitly.
@@ -248,6 +253,21 @@ class AnthropicChatModel(ChatModelBase):
                         or "",
                     )
                     content_blocks.append(thinking_block)
+
+                elif (
+                    hasattr(content_block, "type")
+                    and content_block.type == "redacted_thinking"
+                ):
+                    content_blocks.append(
+                        ThinkingBlock(
+                            thinking="",
+                            redacted_thinking_data=getattr(
+                                content_block,
+                                "data",
+                                "",
+                            ),
+                        ),
+                    )
 
                 elif (
                     hasattr(content_block, "type")
@@ -365,6 +385,17 @@ class AnthropicChatModel(ChatModelBase):
                         "name": tool_block.name,
                         "input": "",
                     }
+                elif event.content_block.type == "redacted_thinking":
+                    delta_content.append(
+                        ThinkingBlock(
+                            thinking="",
+                            redacted_thinking_data=getattr(
+                                event.content_block,
+                                "data",
+                                "",
+                            ),
+                        ),
+                    )
 
             elif event.type == "content_block_delta":
                 block_index = event.index

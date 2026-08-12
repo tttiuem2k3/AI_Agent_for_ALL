@@ -81,6 +81,11 @@ class Msg(BaseModel):
     """The creation time of the message"""
     finished_at: str | None = Field(default=None)
     """The finished time of the message"""
+    structured_output: dict | None = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+    )
+    """Validated structured output attached to an assistant reply."""
     usage: Usage | None = Field(default=None)
     """The token usage information of the message"""
 
@@ -517,6 +522,7 @@ def AssistantMsg(
     finished_at: str | None = None,
     id: str | None = None,  # pylint: disable=redefined-builtin
     usage: Usage | None = None,
+    structured_output: dict | None = None,
 ) -> Msg:
     """Create an assistant message with role ``"assistant"``.
 
@@ -553,6 +559,7 @@ def AssistantMsg(
         metadata=metadata or {},
         created_at=created_at or datetime.now().isoformat(),
         finished_at=finished_at,
+        structured_output=structured_output,
         id=id or _generate_id(),
         usage=usage,
     )

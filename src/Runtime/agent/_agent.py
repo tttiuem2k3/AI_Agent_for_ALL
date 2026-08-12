@@ -5,6 +5,8 @@ import inspect
 
 from asyncio import Queue
 from copy import deepcopy
+from datetime import datetime
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import (
     Any,
     AsyncGenerator,
@@ -12,11 +14,13 @@ from typing import (
     Literal,
     List,
     TYPE_CHECKING,
+    Type,
 )
 
 import jsonschema
+from pydantic import BaseModel
 
-from ._config import ContextConfig, ReActConfig, ModelConfig
+from ._config import ContextConfig, InjectionConfig, ReActConfig, ModelConfig
 from Runtime.state import AgentState
 from ._utils import _ToolCallBatch
 from _logging import logger
@@ -44,6 +48,7 @@ from Runtime.event import (
     RequireExternalExecutionEvent,
     ExternalExecutionResultEvent,
     UserConfirmResultEvent,
+    UserInterruptEvent,
     DataBlockStartEvent,
     DataBlockDeltaEvent,
     DataBlockEndEvent,
@@ -62,6 +67,7 @@ from Runtime.message import (
     UserMsg,
     TextBlock,
     ThinkingBlock,
+    HintBlock,
     ToolCallBlock,
     ToolResultBlock,
     DataBlock,
@@ -106,6 +112,7 @@ class Agent:
         model_config: ModelConfig | None = None,
         context_config: ContextConfig | None = None,
         react_config: ReActConfig | None = None,
+        injection_config: InjectionConfig | None = None,
     ) -> None:
         """Initialize the agent class in ASOFT AI Services.
 
@@ -147,6 +154,7 @@ class Agent:
         self.model_config = model_config or ModelConfig()
         self.context_config = context_config or ContextConfig()
         self.react_config = react_config or ReActConfig()
+        self.injection_config = injection_config or InjectionConfig()
 
         # The permission engine
         self._engine = PermissionEngine(self.state.permission_context)
@@ -195,6 +203,7 @@ class Agent:
         inputs: Msg
         | list[Msg]
         | UserConfirmResultEvent
+        | UserInterruptEvent
         | ExternalExecutionResultEvent
         | None = None,
     ) -> AsyncGenerator[AgentEvent, None]:
@@ -220,8 +229,10 @@ class Agent:
         inputs: Msg
         | list[Msg]
         | UserConfirmResultEvent
+        | UserInterruptEvent
         | ExternalExecutionResultEvent
         | None = None,
+        structured_schema: Type[BaseModel] | dict | None = None,
     ) -> Msg:
         """Reply to the given inputs, consuming all streamed events.
 
@@ -249,6 +260,17 @@ class Agent:
                     final_msg = evt_or_msg
             if final_msg is None:
                 raise RuntimeError("Agent did not produce a final message.")
+            if structured_schema is not None:
+                prepared = await self._prepare_model_input()
+                structured_response = await self.model.generate_structured_output(
+                    messages=prepared["messages"],
+                    structured_model=structured_schema,
+                )
+                final_msg.structured_output = structured_response.content
+                if self.state.context and self.state.context[-1].id == final_msg.id:
+                    self.state.context[-1].structured_output = (
+                        structured_response.content
+                    )
             return final_msg
         finally:
             pass
@@ -504,6 +526,7 @@ class Agent:
         inputs: Msg
         | list[Msg]
         | UserConfirmResultEvent
+        | UserInterruptEvent
         | ExternalExecutionResultEvent
         | None = None,
     ) -> AsyncGenerator[AgentEvent | Msg, None]:
@@ -518,6 +541,7 @@ class Agent:
                 inputs: Msg
                 | list[Msg]
                 | UserConfirmResultEvent
+                | UserInterruptEvent
                 | ExternalExecutionResultEvent
                 | None = inputs,
             ) -> AsyncGenerator[AgentEvent | Msg, None]:
@@ -547,27 +571,118 @@ class Agent:
             async for item in execute_chain():
                 yield item
 
+    async def _close_unfinished_tool_calls(
+        self,
+    ) -> AsyncGenerator[
+        ToolResultStartEvent | ToolResultTextDeltaEvent | ToolResultEndEvent,
+        None,
+    ]:
+        """Close unfinished tool calls after a user interrupt."""
+        if not self.state.context:
+            return
+
+        last_msg = self.state.context[-1]
+        if last_msg.role != "assistant" or last_msg.name != self.name:
+            return
+
+        awaiting_tool_calls: dict[str, int] = {}
+        for index, block in enumerate(last_msg.content):
+            if isinstance(block, ToolCallBlock):
+                awaiting_tool_calls[block.id] = index
+            elif isinstance(block, ToolResultBlock):
+                awaiting_tool_calls.pop(block.id, None)
+
+        interruption_message = (
+            "<system-reminder>The tool call has been interrupted by "
+            "the user.</system-reminder>"
+        )
+
+        for index in awaiting_tool_calls.values():
+            call_block = last_msg.content[index]
+            if not isinstance(call_block, ToolCallBlock):
+                continue
+
+            if call_block.state not in (
+                ToolCallState.ALLOWED,
+                ToolCallState.SUBMITTED,
+            ):
+                yield ToolResultStartEvent(
+                    reply_id=self.state.reply_id,
+                    tool_call_id=call_block.id,
+                    tool_call_name=call_block.name,
+                )
+
+            call_block.state = ToolCallState.FINISHED
+            yield ToolResultTextDeltaEvent(
+                reply_id=self.state.reply_id,
+                tool_call_id=call_block.id,
+                delta=interruption_message,
+            )
+            yield ToolResultEndEvent(
+                reply_id=self.state.reply_id,
+                tool_call_id=call_block.id,
+                state=ToolResultState.INTERRUPTED,
+            )
+            last_msg.content.append(
+                ToolResultBlock(
+                    id=call_block.id,
+                    name=call_block.name,
+                    output=interruption_message,
+                    state=ToolResultState.INTERRUPTED,
+                ),
+            )
+
     async def _reply_impl(
         self,
         inputs: Msg
         | list[Msg]
         | UserConfirmResultEvent
+        | UserInterruptEvent
         | ExternalExecutionResultEvent
         | None = None,
     ) -> AsyncGenerator[AgentEvent | Msg, None]:
         """Core reply logic."""
         # Dispatch the unified inputs by type into the legacy local variables
-        event: (UserConfirmResultEvent | ExternalExecutionResultEvent | None)
+        event: (
+            UserConfirmResultEvent
+            | UserInterruptEvent
+            | ExternalExecutionResultEvent
+            | None
+        )
         msgs: Msg | list[Msg] | None
         if isinstance(
             inputs,
-            (UserConfirmResultEvent, ExternalExecutionResultEvent),
+            (
+                UserConfirmResultEvent,
+                UserInterruptEvent,
+                ExternalExecutionResultEvent,
+            ),
         ):
             event = inputs
             msgs = None
         else:
             event = None
             msgs = inputs
+
+        if isinstance(event, UserInterruptEvent):
+            if event.reply_id != self.state.reply_id:
+                raise ValueError(
+                    "Received UserInterruptEvent for reply "
+                    f"{event.reply_id}, but the current reply is "
+                    f"{self.state.reply_id}.",
+                )
+            async for evt in self._close_unfinished_tool_calls():
+                yield evt
+            yield ReplyEndEvent(
+                session_id=self.state.session_id,
+                reply_id=self.state.reply_id,
+            )
+            yield AssistantMsg(
+                id=self.state.reply_id,
+                name=self.name,
+                content="The previous reply was interrupted by the user.",
+            )
+            return
 
         # ===================================================================
         # Step 1: Checking agent input:
@@ -2092,6 +2207,36 @@ class Agent:
 
         return result
 
+    def _get_runtime_hint(self) -> HintBlock | None:
+        """Build an ephemeral runtime-state hint when explicitly enabled."""
+        if not self.injection_config.inject_runtime_state:
+            return None
+
+        try:
+            timezone = ZoneInfo(self.injection_config.timezone)
+            timezone_name = self.injection_config.timezone
+        except ZoneInfoNotFoundError:
+            timezone = ZoneInfo("UTC")
+            timezone_name = "UTC"
+
+        fields = {
+            "current-time": datetime.now(timezone).strftime(
+                self.injection_config.time_format,
+            ),
+            "timezone": timezone_name,
+            **self.injection_config.extra_fields,
+        }
+        runtime_state = "\n".join(
+            f"<{key}>{value}</{key}>" for key, value in fields.items()
+        )
+        return HintBlock(
+            source=self.injection_config.injection_source,
+            hint=self.injection_config.template.replace(
+                "{runtime_state}",
+                runtime_state,
+            ),
+        )
+
     async def _prepare_model_input(self) -> dict[str, Any]:
         """A unified method to prepare the chat model input according to
         the current context.
@@ -2111,6 +2256,16 @@ class Agent:
             )
         # The conversation context
         messages.extend(self.state.context)
+
+        runtime_hint = self._get_runtime_hint()
+        if runtime_hint is not None:
+            messages.append(
+                AssistantMsg(
+                    id=self.state.reply_id,
+                    name=self.name,
+                    content=[runtime_hint],
+                ),
+            )
 
         # Get the tools schemas
         tools = await self.toolkit.get_tool_schemas(

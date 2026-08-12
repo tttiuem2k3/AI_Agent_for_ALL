@@ -108,6 +108,18 @@ class OllamaChatModel(ChatModelBase):
 
         self.formatter = formatter or OllamaChatFormatter()
         self.client_kwargs = client_kwargs or {}
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        """Return one lazily-created client for this model instance."""
+        if self._client is None:
+            import ollama
+
+            self._client = ollama.AsyncClient(
+                host=self.credential.host,
+                **self.client_kwargs,
+            )
+        return self._client
 
     @classmethod
     def _get_retryable_exceptions(cls) -> tuple[Type[Exception], ...]:
@@ -150,14 +162,7 @@ class OllamaChatModel(ChatModelBase):
                 generator of ``ChatResponse`` objects when streaming is
                 enabled.
         """
-        import ollama
-
-        client = ollama.AsyncClient(
-            **{
-                "host": self.credential.host,
-                **self.client_kwargs,
-            },
-        )
+        client = self._get_client()
 
         formatted_messages = await self.formatter.format(messages)
 

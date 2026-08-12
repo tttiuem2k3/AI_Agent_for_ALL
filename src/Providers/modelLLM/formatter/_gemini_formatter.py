@@ -2,7 +2,6 @@
 """Google Gemini API formatter in ASOFT."""
 import base64
 import fnmatch
-import json
 from abc import ABC
 from typing import Any
 
@@ -11,6 +10,7 @@ from pydantic import Field
 
 from ._formatter_base import FormatterBase
 from _logging import logger
+from Common._utils._common import _json_loads_with_repair
 from Runtime.message import (
     Msg,
     TextBlock,
@@ -157,7 +157,10 @@ class GeminiChatFormatter(_GeminiFormatterBase):
                     # Gemini API requires `thought: true` to mark a part as a
                     # thinking/reasoning block so the model can distinguish it
                     # from normal text and maintain reasoning continuity.
-                    parts.append({"thought": True, "text": block.thinking})
+                    if block.thinking:
+                        parts.append(
+                            {"thought": True, "text": block.thinking},
+                        )
 
                 elif isinstance(block, HintBlock):
                     if parts:
@@ -199,7 +202,9 @@ class GeminiChatFormatter(_GeminiFormatterBase):
                             "function_call": {
                                 "id": block.id,
                                 "name": block.name,
-                                "args": json.loads(block.input or "{}"),
+                                "args": _json_loads_with_repair(
+                                    block.input or "{}",
+                                ),
                             },
                         },
                     )

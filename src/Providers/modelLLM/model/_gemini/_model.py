@@ -244,6 +244,18 @@ class GeminiChatModel(ChatModelBase):
         )
         self.formatter = formatter or GeminiChatFormatter()
         self.client_kwargs = client_kwargs or {}
+        self._client: Any | None = None
+
+    def _get_client(self) -> Any:
+        """Return one lazily-created client for this model instance."""
+        if self._client is None:
+            from google import genai
+
+            self._client = genai.Client(
+                api_key=self.credential.api_key.get_secret_value(),
+                **self.client_kwargs,
+            )
+        return self._client
 
     @classmethod
     def _get_retryable_exceptions(cls) -> tuple[Type[Exception], ...]:
@@ -284,14 +296,7 @@ class GeminiChatModel(ChatModelBase):
                 generator of ``ChatResponse`` objects when streaming is
                 enabled.
         """
-        from google import genai
-
-        client = genai.Client(
-            **{
-                "api_key": self.credential.api_key.get_secret_value(),
-                **self.client_kwargs,
-            },
-        )
+        client = self._get_client()
 
         formatted_messages = await self.formatter.format(messages)
 

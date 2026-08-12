@@ -2,7 +2,6 @@
 """The Anthropic formatter module."""
 import base64
 import fnmatch
-import json
 from abc import ABC
 from typing import Any
 
@@ -11,6 +10,7 @@ from pydantic import Field
 
 from ._formatter_base import FormatterBase
 from _logging import logger
+from Common._utils._common import _json_loads_with_repair
 from Runtime.message import (
     Msg,
     TextBlock,
@@ -72,9 +72,10 @@ class _AnthropicFormatterBase(FormatterBase, ABC):
                     has_tool_result = False
 
                 if isinstance(block, TextBlock):
-                    content_blocks.append(
-                        {"type": "text", "text": block.text},
-                    )
+                    if block.text:
+                        content_blocks.append(
+                            {"type": "text", "text": block.text},
+                        )
 
                 elif isinstance(block, ThinkingBlock):
                     # Anthropic rejects thinking blocks without a valid
@@ -82,8 +83,20 @@ class _AnthropicFormatterBase(FormatterBase, ABC):
                     # ThinkingBlocks from other providers (OpenAI, DeepSeek,
                     # ...) carry no signature, so drop them instead of
                     # forwarding an empty one.
+                    redacted_data = getattr(
+                        block,
+                        "redacted_thinking_data",
+                        None,
+                    )
                     signature = getattr(block, "signature", None)
-                    if signature:
+                    if redacted_data is not None:
+                        content_blocks.append(
+                            {
+                                "type": "redacted_thinking",
+                                "data": redacted_data,
+                            },
+                        )
+                    elif signature:
                         content_blocks.append(
                             {
                                 "type": "thinking",
@@ -146,7 +159,9 @@ class _AnthropicFormatterBase(FormatterBase, ABC):
                             "name": block.name,
                             # Anthropic API expects input as a dict, not a
                             # JSON string.
-                            "input": json.loads(block.input or "{}"),
+                            "input": _json_loads_with_repair(
+                                block.input or "{}",
+                            ),
                         },
                     )
 
@@ -168,15 +183,20 @@ class _AnthropicFormatterBase(FormatterBase, ABC):
                     tool_result_content: list[dict] = []
                     output = block.output
                     if isinstance(output, str):
-                        tool_result_content.append(
-                            {"type": "text", "text": output},
-                        )
+                        if output:
+                            tool_result_content.append(
+                                {"type": "text", "text": output},
+                            )
                     else:
                         for out_block in output:
                             if isinstance(out_block, TextBlock):
-                                tool_result_content.append(
-                                    {"type": "text", "text": out_block.text},
-                                )
+                                if out_block.text:
+                                    tool_result_content.append(
+                                        {
+                                            "type": "text",
+                                            "text": out_block.text,
+                                        },
+                                    )
                             elif isinstance(out_block, DataBlock):
                                 fmt_block = self._format_anthropic_data_block(
                                     out_block,
@@ -199,6 +219,11 @@ class _AnthropicFormatterBase(FormatterBase, ABC):
                                     tool_result_content.append(
                                         {"type": "text", "text": fallback},
                                     )
+
+                    if not tool_result_content:
+                        tool_result_content.append(
+                            {"type": "text", "text": "(empty tool output)"},
+                        )
 
                     content_blocks.append(
                         {

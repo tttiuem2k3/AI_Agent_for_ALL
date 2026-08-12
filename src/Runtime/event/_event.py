@@ -56,6 +56,7 @@ class EventType(StrEnum):
     REQUIRE_EXTERNAL_EXECUTION = "REQUIRE_EXTERNAL_EXECUTION"
 
     USER_CONFIRM_RESULT = "USER_CONFIRM_RESULT"
+    USER_INTERRUPT = "USER_INTERRUPT"
     EXTERNAL_EXECUTION_RESULT = "EXTERNAL_EXECUTION_RESULT"
 
     CUSTOM = "CUSTOM"
@@ -440,6 +441,20 @@ class UserConfirmResultEvent(EventBase):
     """Confirmation results for each pending tool call."""
 
 
+class UserInterruptEvent(EventBase):
+    """User-initiated interrupt targeting a parked reply.
+
+    This event aborts a reply currently waiting for user confirmation or
+    external execution results. Running replies should still be cancelled by
+    cancelling the underlying task.
+    """
+
+    type: Literal[EventType.USER_INTERRUPT] = EventType.USER_INTERRUPT
+    """Event type."""
+    reply_id: str
+    """ID of the reply message this interrupt targets."""
+
+
 class ExternalExecutionResultEvent(EventBase):
     """External execution result event."""
 
@@ -514,6 +529,7 @@ AgentEvent: TypeAlias = (
     | ToolResultDataDeltaEvent
     | ToolResultEndEvent
     | UserConfirmResultEvent
+    | UserInterruptEvent
     | ExternalExecutionResultEvent
     | CustomEvent
 )

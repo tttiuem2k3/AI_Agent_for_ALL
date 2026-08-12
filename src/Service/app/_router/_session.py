@@ -190,7 +190,12 @@ async def interrupt_session(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Session '{session_id}' not found.",
         )
-    await service.cancel_session_run(session_id)
+    await service.interrupt_session_run(
+        user_id,
+        session_id,
+        agent_id=agent_id,
+        runtime_subject_id=runtime_subject_id,
+    )
     return InterruptSessionResponse(session_id=session_id)
 
 
@@ -689,8 +694,20 @@ async def list_messages(
         default=None,
         description="DirectModel runtime subject.",
     ),
-    offset: int = Query(0, ge=0, description="Pagination offset."),
+    offset: int | None = Query(
+        None,
+        ge=0,
+        deprecated=True,
+        description="Deprecated numeric offset. Use before instead.",
+    ),
     limit: int = Query(50, ge=1, le=200, description="Max messages."),
+    before: str | None = Query(
+        default=None,
+        description=(
+            "Optional cursor for older pages. Existing offset/limit clients "
+            "can omit this."
+        ),
+    ),
     user_id: str = Depends(get_current_user_id),
     storage: StorageBase = Depends(get_storage),
     message_bus: MessageBus = Depends(get_message_bus),
@@ -722,17 +739,20 @@ async def list_messages(
             detail=f"Session '{session_id}' not found.",
         )
 
-    messages = await storage.list_messages(
+    messages, has_more = await storage.list_messages(
         user_id,
         session_id,
         offset=offset,
         limit=limit,
+        before=before,
     )
     return ListMessagesResponse(
         messages=messages,
         is_running=await message_bus.is_locked(
             MessageBusKeys.session_lock(session_id),
         ),
+        has_more=has_more,
+        next_before=messages[0].id if has_more and messages else None,
     )
 
 

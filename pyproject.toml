@@ -44,13 +44,13 @@ dependencies = [
 
 [project.optional-dependencies]
 # ------------ Model APIs ------------
-gemini = ["google-genai"]
-ollama = ["ollama>=0.5.4"]
-xai = ["xai-sdk"]
+model-gemini = ["google-genai"]
+model-ollama = ["ollama>=0.5.4"]
+model-xai = ["xai-sdk"]
 models = [
-    "asoft-ai-services[ollama]",
-    "asoft-ai-services[gemini]",
-    "asoft-ai-services[xai]",
+    "asoft-ai-services[model-ollama]",
+    "asoft-ai-services[model-gemini]",
+    "asoft-ai-services[model-xai]",
 ]
 # ------------ Service ------------
 service = [
@@ -60,18 +60,52 @@ service = [
     "ag-ui-protocol>=0.1.10",
     "pyodbc>=5.1",
 ]
-# ------------ Storage ------------
-storage = [
-    "redis",
+# ------------ Storage backends ------------
+storage-redis = ["redis"]
+storage-sql = [
+    "sqlalchemy[asyncio]>=2.0",
+    "alembic>=1.13",
+]
+storage-s3 = ["aioboto3"]
+# ------------ Channel ------------
+channel = [
+    "lark-oapi>=1.4.0",
+    "discord.py>=2.3",
 ]
 # ------------ Workspace -----------
+workspace-docker = ["aiodocker"]
+workspace-e2b = ["e2b"]
+workspace-daytona = ["daytona"]
+workspace-k8s = ["kubernetes-asyncio"]
+workspace-opensandbox = ["opensandbox"]
 workspace = [
-    "aiodocker",
-    "e2b",
+    "asoft-ai-services[workspace-docker]",
+    "asoft-ai-services[workspace-e2b]",
+    "asoft-ai-services[workspace-daytona]",
+    "asoft-ai-services[workspace-k8s]",
+    "asoft-ai-services[workspace-opensandbox]",
 ]
 # ------------ Tools ------------
 tools = [
     "ripgrep",
+]
+# ------------ Vector stores ------------
+vdb-qdrant = ["qdrant-client"]
+vdb-milvus = [
+    "pymilvus>=2.4.0",
+    "milvus-lite>=3.1.0",
+]
+vdb-mongodb = ["pymongo>=4.7"]
+vdb-elasticsearch = ["elasticsearch[async]>=8.12"]
+
+# ------------ RAG ------------
+rag = [
+    "pypdf",
+    "python-pptx",
+    "python-docx",
+    "openpyxl>=3.1.5",
+    "xlrd>=2.0",
+    "pandas",
 ]
 
 # ------------ Long-term middleware ------------
@@ -82,15 +116,42 @@ tools = [
 # v3 phased pipeline in `_add_to_vector_store`. Running on mem0 1.x
 # wouldn't crash but the 2-tier add fallback degenerates into a
 # wasted LLM call.
-mem0 = ["mem0ai>=2.0.0"]
+memory-mem0 = ["mem0ai>=2.0.0"]
+memory-reme = ["reme-ai>=0.4.0.6"]
+memory = [
+    "asoft-ai-services[memory-mem0]",
+    "asoft-ai-services[memory-reme]",
+]
+
+# ------------ Deprecated aliases ------------
+gemini = ["asoft-ai-services[model-gemini]"]
+ollama = ["asoft-ai-services[model-ollama]"]
+xai = ["asoft-ai-services[model-xai]"]
+storage = ["asoft-ai-services[storage-redis]"]
+sql = ["asoft-ai-services[storage-sql]"]
+s3 = ["asoft-ai-services[storage-s3]"]
+k8s = ["asoft-ai-services[workspace-k8s]"]
+milvuslite = ["asoft-ai-services[vdb-milvus]"]
+mongodb = ["asoft-ai-services[vdb-mongodb]"]
+elasticsearch = ["asoft-ai-services[vdb-elasticsearch]"]
+mem0 = ["asoft-ai-services[memory-mem0]"]
+reme = ["asoft-ai-services[memory-reme]"]
 # ------------ Full ------------
 full = [
     "asoft-ai-services[models]",
     "asoft-ai-services[service]",
-    "asoft-ai-services[storage]",
+    "asoft-ai-services[storage-redis]",
+    "asoft-ai-services[storage-sql]",
+    "asoft-ai-services[storage-s3]",
+    "asoft-ai-services[channel]",
     "asoft-ai-services[workspace]",
     "asoft-ai-services[tools]",
-    "asoft-ai-services[mem0]",
+    "asoft-ai-services[rag]",
+    "asoft-ai-services[vdb-qdrant]",
+    "asoft-ai-services[vdb-milvus]",
+    "asoft-ai-services[vdb-mongodb]",
+    "asoft-ai-services[vdb-elasticsearch]",
+    "asoft-ai-services[memory]",
 ]
 
 # ------------ Development ------------

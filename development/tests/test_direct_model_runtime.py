@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 import fakeredis.aioredis
 import httpx
-from pydantic import ValidationError
+from pydantic import BaseModel, ValidationError
 
 from Capabilities.tool._builtin._bash_parser import BashCommandParser
 from Capabilities.tool._builtin._backend import ExecResult
@@ -19,10 +19,39 @@ from Capabilities.workspace import WorkspaceBase
 from Providers.credential import OpenAICredential
 from Providers.modelLLM.model import ChatResponse, FinishedReason
 from Providers.modelLLM.model._openai_chat import OpenAIChatModel
-from Runtime.message import TextBlock, ToolCallBlock, ToolResultState
+from Runtime.message import (
+    AssistantMsg,
+    TextBlock,
+    ToolCallBlock,
+    ToolCallState,
+    ToolResultBlock,
+    ToolResultState,
+)
 from Runtime.agent import Agent
 from Runtime.middleware import MiddlewareBase
 from Capabilities.permission import PermissionBehavior, PermissionDecision
+
+
+def test_openai_chat_model_reuses_lazy_client(monkeypatch: pytest.MonkeyPatch) -> None:
+    import sys
+    from types import SimpleNamespace
+
+    created = []
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            created.append(kwargs)
+
+    monkeypatch.setitem(
+        sys.modules,
+        "openai",
+        SimpleNamespace(AsyncClient=FakeClient),
+    )
+    credential = OpenAICredential(api_key="test-key")
+    model = OpenAIChatModel(credential=credential, model="gpt-test")
+
+    assert model._get_client() is model._get_client()
+    assert len(created) == 1
 from Service.app._router._schema import (
     ChatRequest,
     CreateSessionRequest,
@@ -710,12 +739,25 @@ class _FakeWorkspaceManager:
 
 
 class _FakeMessageBus:
+    def __init__(self) -> None:
+        self.locked = False
+        self.queued = []
+
     @asynccontextmanager
     async def acquire_lock(self, key, ttl_secs):
         yield
 
     async def log_trim(self, key):
         return None
+
+    async def is_locked(self, key):
+        return self.locked
+
+    async def queue_push(self, key, payload):
+        self.queued.append((key, payload))
+
+    async def publish(self, key, payload):
+        self.queued.append((key, payload))
 
 
 class _CapturingAgent:
@@ -786,3 +828,211 @@ def test_chat_service_constructs_ephemeral_direct_agent(
     assert workspace_manager.owner_id == "direct_model__dm_subject_01"
     assert _CapturingAgent.kwargs["name"] == "DirectModel"
     assert "enterprise assistant" in _CapturingAgent.kwargs["system_prompt"]
+
+
+def test_v206_optional_extras_keep_legacy_aliases() -> None:
+    import tomllib
+    from pathlib import Path
+
+    data = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    extras = data["project"]["optional-dependencies"]
+
+    for key in [
+        "storage-redis",
+        "storage-sql",
+        "storage-s3",
+        "channel",
+        "workspace-daytona",
+        "workspace-k8s",
+        "workspace-opensandbox",
+        "vdb-milvus",
+        "vdb-mongodb",
+        "vdb-elasticsearch",
+        "memory-reme",
+    ]:
+        assert key in extras
+
+    assert "storage" in extras
+    assert "mem0" in extras
+    assert any("redis" in dep for dep in extras["storage"])
+
+
+def test_agent_interrupt_closes_parked_tool_calls() -> None:
+    from Runtime.event import ReplyEndEvent, UserInterruptEvent
+
+    class _Model:
+        model = "fake"
+        context_size = 8192
+
+    async def _run() -> None:
+        agent = Agent(name="agent", system_prompt="prompt", model=_Model())
+        agent.state.reply_id = "reply-1"
+        agent.state.context.append(
+            AssistantMsg(
+                id="reply-1",
+                name="agent",
+                content=[
+                    ToolCallBlock(
+                        id="call-1",
+                        name="external_tool",
+                        input="{}",
+                        state=ToolCallState.ASKING,
+                    ),
+                ],
+            ),
+        )
+
+        items = [
+            item
+            async for item in agent._reply(
+                inputs=UserInterruptEvent(reply_id="reply-1"),
+            )
+        ]
+
+        tool_results = agent.state.context[-1].get_content_blocks(
+            "tool_result",
+        )
+        assert len(tool_results) == 1
+        assert isinstance(tool_results[0], ToolResultBlock)
+        assert tool_results[0].id == "call-1"
+        assert tool_results[0].state == ToolResultState.INTERRUPTED
+        assert agent.state.context[-1].get_content_blocks("tool_call")[
+            0
+        ].state == ToolCallState.FINISHED
+        assert any(isinstance(item, ReplyEndEvent) for item in items)
+
+    asyncio.run(_run())
+
+
+def test_session_service_interrupt_enqueues_parked_direct_reply() -> None:
+    from Runtime.event import EventType
+    from Service.app._service import SessionService
+    from Service.app.message_bus import MessageBusKeys
+
+    session = SessionRecord(
+        user_id="runtime-key",
+        agent_id=None,
+        runtime_subject_id="dm_subject_01",
+        runtime_profile=_direct_profile(subject_id="dm_subject_01"),
+        config=SessionConfig(workspace_id="workspace-01"),
+    )
+    session.state.context.append(
+        AssistantMsg(
+            id="reply-1",
+            name="DirectModel",
+            content=[
+                ToolCallBlock(
+                    id="call-1",
+                    name="external_tool",
+                    input="{}",
+                    state=ToolCallState.SUBMITTED,
+                ),
+            ],
+        ),
+    )
+    storage = _FakeStorage(session)
+    bus = _FakeMessageBus()
+
+    async def _run() -> None:
+        service = SessionService(
+            storage=storage,
+            message_bus=bus,
+            workspace_manager=object(),
+        )
+        await service.interrupt_session_run(
+            "runtime-key",
+            session.id,
+            runtime_subject_id="dm_subject_01",
+        )
+
+    asyncio.run(_run())
+
+    queue_payloads = [
+        payload
+        for key, payload in bus.queued
+        if key == MessageBusKeys.wakeup_queue()
+    ]
+    assert len(queue_payloads) == 1
+    assert queue_payloads[0]["kind"] == MessageBusKeys.WAKEUP_KIND_RESUME
+    assert queue_payloads[0]["runtime_subject_id"] == "dm_subject_01"
+    assert queue_payloads[0]["input"]["type"] == EventType.USER_INTERRUPT
+    assert queue_payloads[0]["input"]["reply_id"] == "reply-1"
+
+
+def test_runtime_injection_config_is_disabled_by_default() -> None:
+    from Runtime.agent import InjectionConfig, ReActConfig
+
+    assert ReActConfig().structured_output_grace_iters == 5
+    assert InjectionConfig().inject_runtime_state is False
+
+
+def test_runtime_injection_adds_hint_only_when_enabled() -> None:
+    from Runtime.agent import InjectionConfig
+    from Runtime.message import HintBlock
+
+    class _Model:
+        model = "fake"
+        context_size = 8192
+
+    async def _run() -> None:
+        agent = Agent(
+            name="agent",
+            system_prompt="prompt",
+            model=_Model(),
+            injection_config=InjectionConfig(
+                inject_runtime_state=True,
+                timezone="UTC",
+                extra_fields={"environment": "ASOFT"},
+            ),
+        )
+        prepared = await agent._prepare_model_input()
+        hint_messages = [
+            msg
+            for msg in prepared["messages"]
+            if any(isinstance(block, HintBlock) for block in msg.content)
+        ]
+
+        assert hint_messages
+        hint_block = hint_messages[-1].get_content_blocks("hint")[0]
+        assert "<current-time>" in hint_block.hint
+        assert "<timezone>UTC</timezone>" in hint_block.hint
+        assert "<environment>ASOFT</environment>" in hint_block.hint
+        assert agent.state.context == []
+
+    asyncio.run(_run())
+
+
+def test_agent_reply_can_attach_structured_output() -> None:
+    from Runtime.message import UserMsg
+
+    class _Answer(BaseModel):
+        ok: bool
+        summary: str
+
+    class _Model:
+        model = "fake"
+        context_size = 8192
+
+        async def __call__(self, **kwargs):
+            return ChatResponse(
+                content=[TextBlock(text="done")],
+                is_last=True,
+            )
+
+        async def generate_structured_output(self, messages, structured_model):
+            return SimpleNamespace(content={"ok": True, "summary": "done"})
+
+        async def count_tokens(self, **kwargs):
+            return 1
+
+    async def _run() -> None:
+        agent = Agent(name="agent", system_prompt="prompt", model=_Model())
+        msg = await agent.reply(
+            UserMsg("user", "hello"),
+            structured_schema=_Answer,
+        )
+
+        assert msg.structured_output == {"ok": True, "summary": "done"}
+        assert agent.state.context[-1].structured_output == msg.structured_output
+
+    asyncio.run(_run())

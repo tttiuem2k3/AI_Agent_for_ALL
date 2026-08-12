@@ -14,6 +14,8 @@ import type {
 export interface MessagesResponse {
 	messages: Msg[];
 	is_running: boolean;
+	has_more: boolean;
+	next_before: string | null;
 }
 
 type SessionIdentity =
@@ -53,12 +55,21 @@ export const sessionApi = {
 			identityParams(identity),
 		),
 
-	messages: (sessionId: string, agentId: string, offset = 0, limit = 50) =>
-		client.get<MessagesResponse>(`/sessions/${sessionId}/messages`, {
+	messages: (
+		sessionId: string,
+		agentId: string,
+		offset?: number,
+		limit = 50,
+		before?: string,
+	) => {
+		const params: Record<string, string> = {
 			agent_id: agentId,
-			offset: String(offset),
 			limit: String(limit),
-		}),
+		};
+		if (offset !== undefined) params.offset = String(offset);
+		if (before) params.before = before;
+		return client.get<MessagesResponse>('/sessions/' + sessionId + '/messages', params);
+	},
 
 	/**
 	 * Subscribe to a session's live event stream via SSE.

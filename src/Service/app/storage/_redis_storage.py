@@ -3,6 +3,7 @@
 """The Redis storage implementation."""
 
 from datetime import datetime
+import warnings
 from typing import Any, TYPE_CHECKING, Self
 
 from pydantic import BaseModel
@@ -1015,13 +1016,59 @@ class RedisStorage(StorageBase):
         self,
         user_id: str,
         session_id: str,
-        offset: int = 0,
+        offset: int | None = None,
         limit: int = 50,
-    ) -> list[Msg]:
-        """Return messages for a session with pagination."""
+        before: str | None = None,
+        **kwargs: Any,
+    ) -> tuple[list[Msg], bool]:
+        """Return latest messages with message-ID cursor pagination."""
+        if offset is not None:
+            warnings.warn(
+                "The offset parameter is deprecated. Use before instead.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
         key = self._message_key(user_id, session_id)
-        raw_list = await self._client.lrange(key, offset, offset + limit - 1)
-        return [Msg.model_validate_json(raw) for raw in raw_list]
+        total = await self._client.llen(key)
+        if total == 0:
+            return [], False
+
+        if before is None and offset is not None:
+            raw_list = await self._client.lrange(
+                key,
+                offset,
+                offset + limit - 1,
+            )
+            has_more = total > offset + len(raw_list)
+            return [Msg.model_validate_json(raw) for raw in raw_list], has_more
+
+        if before is None:
+            end = total - 1
+        else:
+            idx = await self._find_message_index(key, before)
+            if idx is None:
+                return [], False
+            end = idx - 1
+
+        if end < 0:
+            return [], False
+
+        start = max(end - limit + 1, 0)
+        raw_list = await self._client.lrange(key, start, end)
+        return [Msg.model_validate_json(raw) for raw in raw_list], start > 0
+
+    async def _find_message_index(self, key: str, message_id: str) -> int | None:
+        """Find a message index in a Redis list by scanning backwards."""
+        end = await self._client.llen(key) - 1
+        chunk_size = 100
+        while end >= 0:
+            start = max(end - chunk_size + 1, 0)
+            raw_list = await self._client.lrange(key, start, end)
+            for offset, raw in enumerate(reversed(raw_list)):
+                if Msg.model_validate_json(raw).id == message_id:
+                    return end - offset
+            end = start - 1
+        return None
 
     # ------------------------------------------------------------------
     # Team persistence

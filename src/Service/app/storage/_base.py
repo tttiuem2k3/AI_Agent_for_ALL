@@ -463,19 +463,22 @@ class StorageBase(ABC):
         self,
         user_id: str,
         session_id: str,
-        offset: int = 0,
+        offset: int | None = None,
         limit: int = 50,
-    ) -> list[Msg]:
-        """Return messages for a session with pagination.
+        before: str | None = None,
+        **kwargs: Any,
+    ) -> tuple[list[Msg], bool]:
+        """Return messages for a session with cursor pagination.
 
         Args:
             user_id (`str`): The owner user id.
             session_id (`str`): The session id.
-            offset (`int`): Starting index (0-based). Defaults to 0.
-            limit (`int`): Maximum number of messages to return.
+            offset: Deprecated numeric offset retained for compatibility.
+            limit: Maximum number of messages to return.
+            before: Message ID cursor for loading older messages.
 
         Returns:
-            `list[Msg]`: Messages in chronological order.
+            Messages in chronological order and whether older messages exist.
         """
 
     # ------------------------------------------------------------------

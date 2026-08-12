@@ -1,3 +1,8 @@
+import { useState, useCallback, useRef, useEffect } from 'react';
+
+import { sessionApi } from '@/api';
+import { chatApi } from '@/api';
+import { useAudioManager } from '@/context/AudioContext';
 import { EventType } from '@/protocol/event';
 import type {
 	AgentEvent,
@@ -11,11 +16,6 @@ import type {
 import { appendEvent, AssistantMsg, UserMsg } from '@/protocol/message';
 import type { Msg, ContentBlock } from '@/protocol/message';
 import type { ToolCallBlock } from '@/protocol/message';
-import { useState, useCallback, useRef, useEffect } from 'react';
-
-import { sessionApi } from '@/api';
-import { chatApi } from '@/api';
-import { useAudioManager } from '@/context/AudioContext';
 import { randomUUID } from '@/utils/uuid';
 
 /**
@@ -88,6 +88,9 @@ export function useMessages(
 ) {
 	const [msgs, setMsgs] = useState<Msg[]>([]);
 	const [loading, setLoading] = useState(false);
+	const [historyLoading, setHistoryLoading] = useState(false);
+	const [hasMoreHistory, setHasMoreHistory] = useState(false);
+	const [historyCursor, setHistoryCursor] = useState<string | null>(null);
 	const [streaming, setStreaming] = useState(false);
 	const [error, setError] = useState<Error | null>(null);
 	// Pending subagent HITL cards projected onto this (leader) session.
@@ -191,6 +194,9 @@ export function useMessages(
 		setMsgs([]);
 		setError(null);
 		setStreaming(false);
+		setHistoryLoading(false);
+		setHasMoreHistory(false);
+		setHistoryCursor(null);
 		setSubagentHitl([]);
 		audioManager?.disposeAll();
 
@@ -204,9 +210,14 @@ export function useMessages(
 			// 1. Fetch persisted history
 			setLoading(true);
 			try {
-				const { messages } = await sessionApi.messages(sessionId, agentId);
+				const { messages, has_more, next_before } = await sessionApi.messages(
+					sessionId,
+					agentId,
+				);
 				if (cancelled) return;
 				msgsRef.current = messages;
+				setHasMoreHistory(has_more);
+				setHistoryCursor(next_before ?? messages[0]?.id ?? null);
 				scheduleUpdate();
 			} catch (e) {
 				if (!cancelled) setError(e as Error);
@@ -322,6 +333,30 @@ export function useMessages(
 		abortRef.current?.abort();
 	}, []);
 
+	/** Load the next older persisted-history page, if the backend exposed one. */
+	const loadOlderMessages = useCallback(async () => {
+		if (!agentId || !sessionId || !historyCursor || historyLoading) return;
+
+		setHistoryLoading(true);
+		try {
+			const { messages, has_more, next_before } = await sessionApi.messages(
+				sessionId,
+				agentId,
+				undefined,
+				50,
+				historyCursor,
+			);
+			msgsRef.current = [...messages, ...msgsRef.current];
+			setHasMoreHistory(has_more);
+			setHistoryCursor(next_before ?? messages[0]?.id ?? null);
+			scheduleUpdate();
+		} catch (e) {
+			setError(e as Error);
+		} finally {
+			setHistoryLoading(false);
+		}
+	}, [agentId, sessionId, historyCursor, historyLoading, scheduleUpdate]);
+
 	/**
 	 * Confirm or deny a tool call that a *team member* is awaiting,
 	 * from this leader view (design §3.6 — backend routing).
@@ -378,12 +413,15 @@ export function useMessages(
 	return {
 		msgs,
 		loading,
+		historyLoading,
+		hasMoreHistory,
 		streaming,
 		error,
 		send,
 		onUserConfirm,
 		onSubagentConfirm,
 		subagentHitl,
+		loadOlderMessages,
 		abort,
 	};
 }

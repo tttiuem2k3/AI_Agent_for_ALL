@@ -50,10 +50,12 @@ from enum import Enum
 from typing import TYPE_CHECKING
 
 from ..message_bus import MessageBus, MessageBusKeys
+from .._bus_ops import enqueue_run_trigger
 from ..storage import StorageBase
 from ._session_projection import SessionProjection
 from ._projectors import SubagentHitlProjector
 from _logging import logger
+from Runtime.event import UserInterruptEvent
 from Runtime.message import ToolCallState
 
 if TYPE_CHECKING:
@@ -221,6 +223,55 @@ class SessionService:
                 )
                 return False
             await asyncio.sleep(self._CANCEL_POLL_INTERVAL_SECS)
+
+    async def interrupt_session_run(
+        self,
+        user_id: str,
+        session_id: str,
+        *,
+        agent_id: str | None = None,
+        runtime_subject_id: str | None = None,
+    ) -> None:
+        """Interrupt an active run or wake a parked HITL reply to close it."""
+        if await self._bus.is_locked(MessageBusKeys.session_lock(session_id)):
+            await self.cancel_session_run(session_id)
+            return
+
+        if bool(agent_id) == bool(runtime_subject_id):
+            return
+
+        session = await self._storage.get_session(
+            user_id,
+            agent_id,
+            session_id,
+        )
+        if session is None or not session.state.context:
+            return
+        if (
+            runtime_subject_id is not None
+            and session.runtime_subject_id != runtime_subject_id
+        ):
+            return
+
+        last_msg = session.state.context[-1]
+        if last_msg.role != "assistant":
+            return
+        tool_calls = last_msg.get_content_blocks("tool_call")
+        if not any(
+            call.state in (ToolCallState.ASKING, ToolCallState.SUBMITTED)
+            for call in tool_calls
+        ):
+            return
+
+        await enqueue_run_trigger(
+            self._bus,
+            user_id=user_id,
+            session_id=session_id,
+            agent_id=agent_id,
+            runtime_subject_id=runtime_subject_id,
+            kind=MessageBusKeys.WAKEUP_KIND_RESUME,
+            inputs=UserInterruptEvent(reply_id=last_msg.id),
+        )
 
     # ------------------------------------------------------------------
     # Delete cascades — every higher-level method delegates to
