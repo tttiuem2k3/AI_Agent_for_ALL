@@ -15,13 +15,34 @@ $env:ASOFT_AI_REDIS_USERNAME = "default"
 $env:ASOFT_AI_REDIS_PASSWORD = "<secret>"
 $env:ASOFT_AI_REDIS_DATABASE = "0"
 $env:ASOFT_AI_REDIS_SSL = "false"
-$env:ASOFT_AI_WORKSPACE_DIR = "D:\\ASOFT_AI\\workspaces"
+$env:ASOFT_AI_WORKSPACE_DIR = "E:\\Asoft\\ASOFT_AI_SERVICES\\service\\workspaces"
 $env:ASOFT_ERPX_SQL_CONNECTION_STRING = "<injected ERPX connection string>"
 $env:ASOFT_SERVICES_API_KEY = "<existing SERVICES api-key>"
 
 uv sync --extra service --extra storage --extra models --extra mem0
 uv run python service/main.py
 ```
+
+## Windows service wrapper
+
+The WinSW wrapper and its matching configuration file are stored together in
+`service/settings`. Run the wrapper from the repository root in an elevated
+PowerShell session:
+
+```powershell
+.\service\settings\AsoftAiService.exe install
+.\service\settings\AsoftAiService.exe start
+```
+
+Use the same executable with `stop`, `restart`, `status`, or `uninstall`
+when administering the Windows service. WinSW resolves
+`AsoftAiService.xml` beside the executable, so the two files must remain
+together with the same basename.
+
+Local agent files, MCP configuration, installed skills, uploads, and session
+context are stored under `service/workspaces`. The standalone host defaults
+to this directory when `ASOFT_AI_WORKSPACE_DIR` is not set. The root-level
+`data` directory is not used for agent workspaces.
 
 The targeted install above is sufficient for the ERPX chat host and avoids
 the development-only `tools` extra. On Windows, `--all-extras` also builds the

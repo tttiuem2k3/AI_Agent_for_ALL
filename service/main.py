@@ -76,7 +76,7 @@ class ServiceHostSettings:
             redis_bus_db=_env_int("ASOFT_AI_REDIS_BUS_DB", shared_db),
             redis_ssl=_env_bool("ASOFT_AI_REDIS_SSL"),
             workspace_dir=Path(
-                os.getenv("ASOFT_AI_WORKSPACE_DIR", "./data/workspaces"),
+                os.getenv("ASOFT_AI_WORKSPACE_DIR", "./service/workspaces"),
             ).resolve(),
             erpx_sql_connection_string=(
                 os.getenv(
