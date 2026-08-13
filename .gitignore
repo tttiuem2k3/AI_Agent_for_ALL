@@ -1,0 +1,9 @@
+data/
+.idea/
+.pytest_cache/
+.venv/
+development/Web_UI/node_modules
+docs/superpowers
+__pycache__/
+*.py[cod]
+*$py.class

@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-"""AgentScope v2.0.6 memory middleware compatibility tests."""
 import asyncio
 import sys
 

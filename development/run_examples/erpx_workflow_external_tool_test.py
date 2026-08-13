@@ -1,21 +1,5 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=redefined-builtin
-"""Task 3.2 — ON-controlled Tools surface as AgentScope external tools.
-
-The defect this closes was measured on the dev box on 2026-08-07: a Tool with
-``RequireApproval = true`` could never run.  ``ERPXDynamicTool`` sets
-``is_external_tool = False``, so AgentScope executed it *inside* Python, which
-called back over HTTP into the Tool Gateway — and the gateway looked for an
-approval row that the ``REQUIRE_USER_CONFIRM`` projection had not written yet.
-Gateway rejected with 500 sixteen seconds before the row existed, the turn
-died, and when the user finally clicked Approve there was nobody left to
-resume it.
-
-The fix is to stop deciding inside Python.  A Tool ON controls is exposed as an
-external tool, so AgentScope yields ``RequireExternalExecutionEvent`` and stops;
-ON then decides execute / wait / require approval, and resumes the turn with an
-``ExternalExecutionResultEvent``.
-"""
 import json
 from typing import Any
 from unittest.async_case import IsolatedAsyncioTestCase
@@ -201,11 +185,6 @@ class ERPXExternalToolFactoryTest(IsolatedAsyncioTestCase):
         self.assertEqual(len(built), 1)
 
     async def test_external_tool_call_is_unreachable(self) -> None:
-        """Gọi thẳng phải NỔ.
-
-        Nếu một ngày AgentScope quên kiểm ``is_external_tool``, im lặng chạy
-        trong tiến trình Python là quay lại đúng lỗi Task 3.2 sinh ra để sửa.
-        """
         built, _ = await _build(
             [
                 _capability(

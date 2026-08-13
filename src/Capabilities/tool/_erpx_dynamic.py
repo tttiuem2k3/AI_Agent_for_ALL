@@ -29,7 +29,7 @@ class ERPXExternalTool(ToolBase):
 
     Same model-facing surface as :class:`ERPXDynamicTool` — same name, same
     description, same schema — and the opposite execution contract:
-    ``is_external_tool = True`` makes AgentScope mark the call ``SUBMITTED``,
+    ``is_external_tool = True mark the call ``SUBMITTED``,
     emit ``RequireExternalExecutionEvent`` and return from its loop.  ON then
     decides whether the call runs now, waits for a reviewer, or is rejected,
     and resumes the turn with an ``ExternalExecutionResultEvent``.

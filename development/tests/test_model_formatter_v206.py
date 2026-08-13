@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-"""AgentScope v2.0.6 model formatter regression tests."""
 import asyncio
 
 from Providers.modelLLM.formatter import (

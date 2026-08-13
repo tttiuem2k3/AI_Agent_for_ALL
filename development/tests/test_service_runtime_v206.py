@@ -1,5 +1,4 @@
 # -*- coding: utf-8 -*-
-"""AgentScope v2.0.6 additive service runtime contracts."""
 import asyncio
 
 import fakeredis.aioredis

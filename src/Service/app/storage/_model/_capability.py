@@ -47,12 +47,6 @@ class ToolCapability(BaseModel):
     """
 
     is_external_execution: bool = False
-    """``True`` when ON — not Python — decides and performs the call.
-
-    Such a Tool is exposed to AgentScope as an external tool, so the turn stops
-    with ``RequireExternalExecutionEvent`` instead of Python calling back over
-    HTTP while the approval row may not exist yet.
-    """
 
     @field_validator("input_schema")
     @classmethod

@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-"""AgentScope v2.0.6 additive RAG contracts."""
+
 import asyncio
 import builtins
 

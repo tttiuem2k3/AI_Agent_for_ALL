@@ -195,10 +195,10 @@ are easier for the user to review and authorize:
             "SilentlyContinue\n"
             "$OutputEncoding = [Console]::OutputEncoding = "
             "[System.Text.UTF8Encoding]::new($false)\n"
-            "$AgentScopeCommand = [System.Text.Encoding]::Unicode.GetString("
+            "$AsoftCommand = [System.Text.Encoding]::Unicode.GetString("
             "[System.Convert]::FromBase64String("
             f"'{encoded_user_command}'))\n"
-            "& ([ScriptBlock]::Create($AgentScopeCommand))"
+            "& ([ScriptBlock]::Create($AsoftCommand))"
         )
         encoded_command = base64.b64encode(
             powershell_script.encode("utf-16-le"),

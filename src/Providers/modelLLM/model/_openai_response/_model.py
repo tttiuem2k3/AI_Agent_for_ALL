@@ -338,10 +338,6 @@ class OpenAIResponseModel(ChatModelBase):
                         "reason",
                         None,
                     )
-                    # A token limit is a valid terminal result: preserve the
-                    # partial answer and close the AgentScope stream cleanly.
-                    # Safety-filtered or unknown incomplete results must not
-                    # be persisted as successful assistant messages.
                     if incomplete_reason not in (
                         "max_output_tokens",
                         "max_tokens",
@@ -434,9 +430,6 @@ class OpenAIResponseModel(ChatModelBase):
                     chat_resp_kwargs["id"] = response_id
                 yield ChatResponse(**chat_resp_kwargs)
 
-        # Every Responses API stream must end in a terminal event. Raising here
-        # preserves the model adapter contract and prevents an unrelated
-        # AttributeError later in the AgentScope-compatible agent runtime.
         raise RuntimeError(
             "OpenAI Responses API stream ended without a terminal event.",
         )

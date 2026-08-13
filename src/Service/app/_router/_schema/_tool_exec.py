@@ -31,7 +31,6 @@ class ToolExecRequest(BaseModel):
 
 
 class ToolExecResponse(BaseModel):
-    """Structured result, shaped like an AgentScope tool result block."""
 
     model_config = ConfigDict(extra="forbid")
 
