@@ -1,11 +1,12 @@
 import {
 	AlertTriangle,
-	CheckCircle2,
 	Copy,
 	Download,
 	FileText,
 	FileUp,
 	RefreshCw,
+	RotateCcw,
+	Trash2,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
@@ -16,7 +17,7 @@ import { documentConversionApi } from '@/api';
 import type { DocumentConversionHealth, DocumentConversionResult } from '@/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
@@ -53,24 +54,6 @@ function formatBytes(bytes: number): string {
 function extensionOf(name: string): string {
 	const dot = name.lastIndexOf('.');
 	return dot >= 0 ? name.slice(dot).toLowerCase() : '';
-}
-
-function HealthBadge({ health }: { health: DocumentConversionHealth | null }) {
-	if (!health) {
-		return <Badge variant="outline">Đang kiểm tra native...</Badge>;
-	}
-	if (health.ok) {
-		return (
-			<Badge variant="secondary" className="gap-1.5">
-				<CheckCircle2 className="size-3.5" /> Native {health.native_version}
-			</Badge>
-		);
-	}
-	return (
-		<Badge variant="destructive" className="gap-1.5">
-			<AlertTriangle className="size-3.5" /> Native chưa sẵn sàng
-		</Badge>
-	);
 }
 
 export function DocumentConversionPage() {
@@ -123,6 +106,27 @@ export function DocumentConversionPage() {
 		setFile(candidate);
 	};
 
+	const clearFileInput = () => {
+		if (inputRef.current) inputRef.current.value = '';
+	};
+
+	const removeFile = () => {
+		if (converting) return;
+		setFile(null);
+		setError(null);
+		setDragging(false);
+		clearFileInput();
+	};
+
+	const resetAll = () => {
+		if (converting) return;
+		setFile(null);
+		setResult(null);
+		setError(null);
+		setDragging(false);
+		clearFileInput();
+	};
+
 	const convert = async () => {
 		if (!file || !fileValid) return;
 		setConverting(true);
@@ -164,24 +168,28 @@ export function DocumentConversionPage() {
 				<div>
 					<h1 className="text-2xl font-semibold">Document Conversion</h1>
 					<p className="mt-1 text-sm text-muted-foreground">
-						Gọi API của ASOFT AI Services đang chạy để test
-						Capabilities.document_conversion.
+						Chuyển đổi file tài liệu sang Markdown.
 					</p>
-				</div>
-
-				<div className="flex items-center gap-2">
-					<HealthBadge health={health} />
-					<Button size="icon-sm" variant="outline" onClick={() => void refreshHealth()}>
-						<RefreshCw className="size-4" />
-					</Button>
 				</div>
 			</header>
 
-			<main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto rounded-t-3xl bg-background p-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-				<section className="flex min-h-0 flex-col gap-4">
-					<Card>
-						<CardHeader>
-							<CardTitle className="text-base">1. Chọn file cần chuyển đổi</CardTitle>
+			<main className="grid min-h-0 flex-1 grid-cols-1 gap-4 overflow-auto rounded-t-3xl bg-background p-5 xl:grid-cols-[380px_minmax(0,1fr)] xl:overflow-hidden">
+				<section className="flex min-w-0 flex-col gap-3 self-start xl:h-full xl:min-h-0 xl:self-stretch xl:overflow-hidden">
+					<Card className="shrink-0">
+						<CardHeader className="grid-cols-[minmax(0,1fr)_auto] items-center gap-2">
+							<CardTitle className="min-w-0 text-base">
+								1. Chọn file cần chuyển đổi
+							</CardTitle>
+							<Button
+								size="icon-sm"
+								variant="outline"
+								disabled={converting || (!file && !result && !error)}
+								onClick={resetAll}
+								tooltip="Reset"
+								aria-label="Reset"
+							>
+								<RotateCcw className="size-3.5" />
+							</Button>
 						</CardHeader>
 						<CardContent className="space-y-4">
 							<input
@@ -228,9 +236,21 @@ export function DocumentConversionPage() {
 											{formatBytes(file.size)}
 										</div>
 									</div>
-									<Badge variant="outline">
-										{extensionOf(file.name).slice(1).toUpperCase()}
-									</Badge>
+									<div className="flex shrink-0 items-center gap-2">
+										<Badge variant="outline">
+											{extensionOf(file.name).slice(1).toUpperCase()}
+										</Badge>
+										<Button
+											size="icon-sm"
+											variant="outline"
+											disabled={converting}
+											onClick={removeFile}
+											tooltip="Xóa file"
+											aria-label="Xóa file"
+										>
+											<Trash2 className="size-3.5" />
+										</Button>
+									</div>
 								</div>
 							)}
 
@@ -239,35 +259,45 @@ export function DocumentConversionPage() {
 									{error}
 								</div>
 							)}
-
+						</CardContent>
+						<CardFooter className="mt-1">
 							<Button
-								className="w-full"
+								className="h-10 w-full text-sm font-semibold"
 								disabled={!fileValid || converting || health?.ok !== true}
 								onClick={() => void convert()}
 							>
 								{converting ? <RefreshCw className="animate-spin" /> : <FileText />}
-								{converting ? 'Đang chuyển đổi...' : 'Chuyển sang Markdown'}
+								{converting
+									? 'Đang chuyển đổi...'
+									: health?.ok !== true
+										? 'Service chưa sẵn sàng'
+										: fileValid
+											? 'Chuyển sang Markdown'
+											: 'Chọn file để chuyển đổi'}
 							</Button>
-						</CardContent>
+						</CardFooter>
 					</Card>
 
-					<Card>
+					<Card size="sm" className="shrink-0">
 						<CardHeader>
-							<CardTitle className="text-base">Định dạng hỗ trợ</CardTitle>
+							<CardTitle className="text-sm">Định dạng hỗ trợ</CardTitle>
 						</CardHeader>
-						<CardContent className="space-y-2">
-							{FORMAT_GROUPS.map(([formats, label]) => (
-								<div key={formats} className="rounded-lg border p-3">
-									<div className="text-sm font-medium">{formats}</div>
-									<div className="text-xs text-muted-foreground">{label}</div>
-								</div>
+						<CardContent className="flex flex-wrap gap-1.5">
+							{FORMAT_GROUPS.map(([formats]) => (
+								<Badge
+									key={formats}
+									variant="outline"
+									className="px-2 py-1 text-xs font-medium"
+								>
+									{formats}
+								</Badge>
 							))}
 						</CardContent>
 					</Card>
 				</section>
 
-				<section className="min-h-[520px] min-w-0">
-					<Card className="flex h-full min-h-[520px] flex-col">
+				<section className="min-h-[520px] min-w-0 xl:h-full xl:min-h-0">
+					<Card className="flex h-full min-h-[520px] flex-col xl:min-h-0">
 						<CardHeader className="flex-row items-center justify-between gap-3">
 							<div>
 								<CardTitle className="text-base">2. Kết quả Markdown</CardTitle>

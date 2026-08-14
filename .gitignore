@@ -13,4 +13,3 @@ dist/
 build/
 *.egg-info/
 scripts/
-service/settings/*.local.xml

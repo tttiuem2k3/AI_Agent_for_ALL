@@ -68,10 +68,3 @@ The ERPX connection registry (`ONT1000`/`ONT1001`) is the administrative
 source of configuration, but it does not inject environment variables into
 this process. Deployment must map the approved registry values to these
 environment variables.
-
-## Local secret settings
-
-Secrets that must not be committed can be stored in
-`service/settings/AsoftAiService.local.xml`. The standalone host loads this file
-after the shared XML settings, while operating-system environment variables keep
-the highest priority. Files matching `service/settings/*.local.xml` are ignored by Git.

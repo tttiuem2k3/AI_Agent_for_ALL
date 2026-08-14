@@ -10,9 +10,9 @@
        value="E:\Asoft\ASOFT_AI_SERVICES\src" />
   <env name="PYTHONUNBUFFERED" value="1" />
   <!-- Địa chỉ IP/host mà API service lắng nghe. -->
-  <env name="ASOFT_AI_HOST" value="127.0.0.1" />
+  <env name="ASOFT_AI_HOST" value="192.168.0.134" />
   <env name="ASOFT_AI_PORT" value="8000" />
-  <env name="ASOFT_AI_REDIS_HOST" value="127.0.0.1" />
+  <env name="ASOFT_AI_REDIS_HOST" value="192.168.0.134" />
   <env name="ASOFT_AI_REDIS_PORT" value="6379" />
   <env name="ASOFT_AI_REDIS_USERNAME" value="" />
   <env name="ASOFT_AI_REDIS_PASSWORD" value="" />
@@ -23,8 +23,11 @@
        value="E:\Asoft\ASOFT_AI_SERVICES\service\workspaces" />
   <env name="ASOFT_ERPX_SQL_CONNECTION_STRING"
        value="Server=192.168.0.201,14335;Database=ERPX_DEV;User ID=sa;Password=As@19006123;Trusted_Connection=False;Connection Timeout=12;TrustServerCertificate=True;" />
+  <!-- Key bảo mật khi call API kết nối -->
   <env name="ASOFT_SERVICES_API_KEY"
        value="YXNvZnRALmNvbS52bkhVWU5IVEhBTkhNSU5ITEFMQW9rYmF5ZGU" />
+  <!-- API-KEY OpenAI dùng cho các mục đính local -->
+  <env name="ASOFT_AI_KF_OPENAI_API_KEY" value="" />
   <!-- Thư mục lưu log chạy service. -->
   <logpath>E:\Asoft\ASOFT_AI_SERVICES\logs</logpath>
   <!-- Cấu hình xoay log theo dung lượng để tránh file log quá lớn. -->

@@ -49,24 +49,16 @@ def _env_bool(name: str, default: bool = False) -> bool:
 
 def _load_xml_env_defaults() -> None:
     settings_dir = Path(__file__).resolve().parent / "settings"
-    protected_names = set(os.environ)
-    files = (
-        ("AsoftAiService.xml", False),
-        ("KnowledgeFactoryRagSettings.xml", False),
-        ("AsoftAiService.local.xml", True),
-        ("KnowledgeFactoryRagSettings.local.xml", True),
-    )
-    for filename, override in files:
+    for filename in ("AsoftAiService.xml", "KnowledgeFactoryRagSettings.xml"):
         path = settings_dir / filename
         if not path.exists():
             continue
         root = ET.fromstring(path.read_text(encoding="utf-8-sig"))
         for item in root.findall(".//env"):
             name = item.attrib.get("name")
-            if not name or name in protected_names:
+            if not name or name in os.environ:
                 continue
-            if override or name not in os.environ:
-                os.environ[name] = item.attrib.get("value", "")
+            os.environ[name] = item.attrib.get("value", "")
 
 _load_xml_env_defaults()
 
