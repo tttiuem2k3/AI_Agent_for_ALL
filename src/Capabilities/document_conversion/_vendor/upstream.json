@@ -1,0 +1,8 @@
+{
+  "sourceRepository": "https://github.com/tttiuem2k3/anydoc",
+  "upstreamRepository": "https://github.com/firecrawl/anydoc",
+  "sourceCommit": "e754e1d33a1a540ebc9226e36f11d3f401852c9e",
+  "sourceVersion": "e754e1d",
+  "integration": "Capabilities.document_conversion",
+  "semanticPatches": []
+}

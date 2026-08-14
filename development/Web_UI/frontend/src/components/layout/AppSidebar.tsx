@@ -1,4 +1,12 @@
-import { BotMessageSquare, Calendars, Compass, KeyRound, Languages, Settings } from 'lucide-react';
+import {
+	BotMessageSquare,
+	Calendars,
+	Compass,
+	FileText,
+	KeyRound,
+	Languages,
+	Settings,
+} from 'lucide-react';
 import { useOnborda } from 'onborda';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -92,6 +100,16 @@ export function AppSidebar() {
 									className="px-2"
 								>
 									<KeyRound />
+								</SidebarMenuButton>
+							</SidebarMenuItem>
+							<SidebarMenuItem>
+								<SidebarMenuButton
+									tooltip={{ children: 'Document Conversion', hidden: false }}
+									isActive={location.pathname === '/document-conversion'}
+									onClick={() => navigate('/document-conversion')}
+									className="px-2"
+								>
+									<FileText />
 								</SidebarMenuButton>
 							</SidebarMenuItem>
 						</SidebarMenu>

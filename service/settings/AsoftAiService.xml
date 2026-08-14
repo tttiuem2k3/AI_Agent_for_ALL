@@ -3,48 +3,43 @@
   <id>AsoftAiPythonService</id>
   <name>ASOFT AI Python Service</name>
   <description>ASOFT ERPX AI FastAPI service</description>
-
   <executable>E:\Asoft\ASOFT_AI_SERVICES\.venv\Scripts\python.exe</executable>
-
   <arguments>"E:\Asoft\ASOFT_AI_SERVICES\service\main.py"</arguments>
-
   <workingdirectory>E:\Asoft\ASOFT_AI_SERVICES</workingdirectory>
-
   <env name="PYTHONPATH"
        value="E:\Asoft\ASOFT_AI_SERVICES\src" />
-
   <env name="PYTHONUNBUFFERED" value="1" />
-
+  <!-- Địa chỉ IP/host mà API service lắng nghe. -->
   <env name="ASOFT_AI_HOST" value="127.0.0.1" />
   <env name="ASOFT_AI_PORT" value="8000" />
-
-  <env name="ASOFT_AI_REDIS_HOST" value="192.168.0.200" />
-  <env name="ASOFT_AI_REDIS_PORT" value="16379" />
-  <env name="ASOFT_AI_REDIS_USERNAME" value="default" />
-  <env name="ASOFT_AI_REDIS_PASSWORD" value="As@19006123@!#" />
+  <env name="ASOFT_AI_REDIS_HOST" value="127.0.0.1" />
+  <env name="ASOFT_AI_REDIS_PORT" value="6379" />
+  <env name="ASOFT_AI_REDIS_USERNAME" value="" />
+  <env name="ASOFT_AI_REDIS_PASSWORD" value="" />
   <env name="ASOFT_AI_REDIS_DATABASE" value="0" />
+  <!-- Bật/tắt kết nối SSL đến Redis. -->
   <env name="ASOFT_AI_REDIS_SSL" value="false" />
-
   <env name="ASOFT_AI_WORKSPACE_DIR"
        value="E:\Asoft\ASOFT_AI_SERVICES\service\workspaces" />
-
   <env name="ASOFT_ERPX_SQL_CONNECTION_STRING"
-       value="Server=MINHNHUT\SQL2025;Database=ERPX;User ID=sa;Password=As@19006123@!#;Trusted_Connection=False;Connection Timeout=12;TrustServerCertificate=True;" />
-
+       value="Server=192.168.0.201,14335;Database=ERPX_DEV;User ID=sa;Password=As@19006123;Trusted_Connection=False;Connection Timeout=12;TrustServerCertificate=True;" />
   <env name="ASOFT_SERVICES_API_KEY"
        value="YXNvZnRALmNvbS52bkhVWU5IVEhBTkhNSU5ITEFMQW9rYmF5ZGU" />
-
+  <!-- Thư mục lưu log chạy service. -->
   <logpath>E:\Asoft\ASOFT_AI_SERVICES\logs</logpath>
-
+  <!-- Cấu hình xoay log theo dung lượng để tránh file log quá lớn. -->
   <log mode="roll-by-size">
     <sizeThreshold>10240</sizeThreshold>
     <keepFiles>10</keepFiles>
   </log>
-
+  <!-- Tự khởi động lại service nếu bị lỗi, lần 1 sau 10 giây. -->
   <onfailure action="restart" delay="10 sec" />
+  <!-- Tự khởi động lại service nếu tiếp tục lỗi, lần 2 sau 30 giây. -->
   <onfailure action="restart" delay="30 sec" />
+  <!-- Tự khởi động lại service nếu tiếp tục lỗi, lần 3 sau 60 giây. -->
   <onfailure action="restart" delay="60 sec" />
-
+  <!-- Sau khoảng thời gian này, bộ đếm lỗi restart được đặt lại. -->
   <resetfailure>1 hour</resetfailure>
+  <!-- Thời gian chờ tối đa khi dừng service. -->
   <stoptimeout>30 sec</stoptimeout>
 </service>

@@ -1,13 +1,16 @@
 # -*- coding: utf-8 -*-
-"""RAG parsers for Word and Excel documents."""
+"""RAG parsers and adapters for supported document formats."""
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import mimetypes
 from abc import ABC, abstractmethod
+from pathlib import Path
 from typing import Any, Literal
 
+from Capabilities.document_conversion import ConversionOptions, DocumentConversionService
 from Runtime.message import TextBlock
 
 from ._document import Section
@@ -158,3 +161,40 @@ def _table_to_markdown(rows: list[list[str]]) -> str:
     body = normalized[1:]
     all_rows = [header, separator, *body]
     return "\n".join("| " + " | ".join(row) + " |" for row in all_rows)
+
+
+class DocumentConversionParser(ParserBase):
+    """RAG adapter backed by the generic document conversion capability."""
+
+    supported_media_types: list[str] = []
+
+    def __init__(self, converter: DocumentConversionService | None = None) -> None:
+        self.converter = converter or DocumentConversionService()
+
+    @classmethod
+    def supported_extensions(cls) -> list[str]:
+        return [
+            ".csv", ".doc", ".docm", ".docx", ".epub", ".odp", ".ods",
+            ".odt", ".pdf", ".pot", ".pps", ".ppsm", ".ppsx", ".ppt",
+            ".pptm", ".pptx", ".rtf", ".xls", ".xlsb", ".xlsm", ".xlsx",
+        ]
+
+    async def parse(self, file: bytes | str, filename: str) -> list[Section]:
+        content = file if isinstance(file, bytes) else await asyncio.to_thread(Path(file).read_bytes)
+        converted = await self.converter.convert(
+            content,
+            filename=filename,
+            options=ConversionOptions(include_structure=False, include_assets=False),
+        )
+        if not converted.markdown.strip():
+            return []
+        return [
+            Section(
+                content=TextBlock(text=converted.markdown),
+                source=filename,
+                metadata={
+                    "format": converted.format.value,
+                    "warnings": list(converted.warnings),
+                },
+            ),
+        ]

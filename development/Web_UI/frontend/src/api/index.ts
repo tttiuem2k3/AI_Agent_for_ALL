@@ -7,3 +7,5 @@ export { workspaceApi } from './workspace';
 export { scheduleApi } from './schedule';
 export { modelApi, ttsModelApi } from './model';
 export { healthApi } from './health';
+export { documentConversionApi } from './documentConversion';
+export type { DocumentConversionHealth, DocumentConversionResult } from './documentConversion';

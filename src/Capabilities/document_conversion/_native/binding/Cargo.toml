@@ -1,0 +1,19 @@
+# The wheel version: pyproject.toml reads `version` from here (maturin's
+# dynamic version), so bump it together with the workspace release version.
+[package]
+name = "asoft-document-conversion-native"
+version = "0.1.9"
+edition = "2024"
+description = "Python bindings for ASOFT document conversion engine"
+license = "MIT"
+publish = false
+
+[lib]
+path = "lib.rs"
+crate-type = ["cdylib"]
+
+[dependencies]
+asoft_document_conversion_engine = { path = ".." }
+# abi3-py310 pins the stable ABI: one wheel per platform covers every
+# CPython from 3.10 up.
+pyo3 = { version = "0.29", features = ["abi3-py310", "extension-module"] }

@@ -98,6 +98,11 @@ vdb-milvus = [
 vdb-mongodb = ["pymongo>=4.7"]
 vdb-elasticsearch = ["elasticsearch[async]>=8.12"]
 
+# ------------ Document conversion ------------
+document-conversion = [
+    "asoft-document-conversion-native==0.1.9",
+]
+
 # ------------ RAG ------------
 rag = [
     "pypdf",
@@ -146,6 +151,7 @@ full = [
     "asoft-ai-services[channel]",
     "asoft-ai-services[workspace]",
     "asoft-ai-services[tools]",
+    "asoft-ai-services[document-conversion]",
     "asoft-ai-services[rag]",
     "asoft-ai-services[vdb-qdrant]",
     "asoft-ai-services[vdb-milvus]",
@@ -162,13 +168,20 @@ dev = [
     "pre-commit",
     "pytest",
     "pytest-forked",
+    "maturin>=1.9,<2",
     "myst_parser",
     "matplotlib",
     "fakeredis",
 ]
 
+[tool.uv]
+required-version = ">=0.12.4,<0.13"
+
+[tool.uv.sources]
+asoft-document-conversion-native = { path = "src/Capabilities/document_conversion/_native/binding" }
+
 [tool.setuptools]
-packages = { find = { where = ["src"] } }
+packages = { find = { where = ["src"], exclude = ["Capabilities.document_conversion._native*", "Capabilities.document_conversion._vendor*"] } }
 py-modules = ["_logging", "_version"]
 include-package-data = true
 

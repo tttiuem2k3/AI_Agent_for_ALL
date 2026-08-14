@@ -4,16 +4,17 @@ ASOFT AI Services is the Python AI platform developed by ASOFT for ERPX. It
 provides the agent runtime, model integrations, tools, and service APIs needed
 to add AI capabilities to the ERPX ecosystem.
 
-The source is organized around four main areas:
+The source is organized around these main areas:
 
 - `Runtime`: agents, messages, events, middleware, and runtime state.
-- `Providers/modelLLM`: LLM chat models and provider-specific formatters.
-- `Providers/modelBSN`: specialized embedding, OCR, STT, and TTS models.
-- `Providers/credential`: shared provider credentials and connection settings.
-- `Capabilities`: tools, MCP, permissions, skills, and workspaces.
+- `Providers`: LLM, embedding, OCR, speech, and credential integrations.
+- `Capabilities`: reusable tools, MCP, permissions, RAG, workspaces, and document conversion.
+- `ASOFT`: ERPX-specific business integrations such as Knowledge Factory.
 - `Service`: the FastAPI application, storage, scheduling, and Web UI APIs.
+- `Common`: shared types, exceptions, and utilities.
 
-The project requires Python 3.11 or newer.
+The project requires Python 3.11 or newer. Development uses `uv` 0.12.x;
+`pyproject.toml` enforces the supported `uv` range.
 
 ## Purpose
 
@@ -25,20 +26,51 @@ The project requires Python 3.11 or newer.
 
 ## Installation
 
-Install the project from source:
+On Windows, install Python 3.11+, `uv` 0.12.x, Git, Rust stable >=1.88, and the
+Visual Studio 2022 C++ x64 toolset. The native document converter uses Rust and
+Maturin; `uv sync --all-extras` builds it automatically from the local source.
 
-```bash
+```powershell
+cd E:\Asoft\ASOFT_AI_SERVICES
 uv sync --all-extras
-```
-
-Alternatively, install it in editable mode:
-
-```bash
-uv pip install -e ".[full]"
+(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& e:\Asoft\ASOFT_AI_SERVICES\.venv\Scripts\Activate.ps1)
 ```
 
 The distribution name is `asoft-ai-services`. It installs the top-level Python
-packages `Common`, `Providers`, `Capabilities`, `Runtime`, and `Service`.
+packages `Common`, `Providers`, `Capabilities`, `Runtime`, `Service`, and `ASOFT`.
+
+## Document conversion native runtime
+
+`Capabilities.document_conversion` converts supported office/document formats
+to normalized Markdown through the private `asoft-document-conversion-native`
+PyO3 wheel. Application code imports only the capability API, never `_native`
+directly.
+
+To resynchronize the vendored runtime from the maintained clean fork:
+
+```powershell
+.venv\Scripts\python.exe src\Capabilities\document_conversion\_vendor\sync_from_fork.py
+.venv\Scripts\python.exe src\Capabilities\document_conversion\_vendor\verify_source_parity.py
+```
+
+To build/install only the native wheel into the active project environment:
+
+```powershell
+.\src\Capabilities\document_conversion\_vendor\build_native.ps1 -Install
+```
+
+## Release bundle
+
+The application and native extension are deliberately shipped as two wheels.
+The main `asoft-ai-services` wheel excludes `_native` and `_vendor` source.
+
+```powershell
+.\scripts\build_release.ps1 -Clean
+.\scripts\install_release.ps1 -Python .\.venv\Scripts\python.exe
+```
+
+The release bundle contains `asoft_ai_services-*.whl` and the platform-specific
+`asoft_document_conversion_native-*.whl`.
 
 ## Quick start
 
@@ -104,6 +136,7 @@ Detailed setup and architecture documentation:
 
 - [Setup guide](docs/huong_dan_cai_dat.md)
 - [Project architecture](docs/kien_truc_du_an.md)
+- [Document conversion native runtime](docs/document_conversion_native.md)
 - [AI Service API and Postman examples](docs/Thong_tin_API_ASOFT_AI_SERVICES.md)
 
 ## License

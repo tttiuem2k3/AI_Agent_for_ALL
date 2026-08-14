@@ -7,3 +7,10 @@ docs/superpowers
 __pycache__/
 *.py[cod]
 *$py.class
+src/Capabilities/document_conversion/_native/target/
+src/Capabilities/document_conversion/_native/dist/
+dist/
+build/
+*.egg-info/
+scripts/
+service/settings/*.local.xml

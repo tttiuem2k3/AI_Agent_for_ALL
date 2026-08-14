@@ -14,9 +14,19 @@ def test_rag_symbols_import_without_optional_backends() -> None:
     assert hasattr(rag, "VectorStoreBase")
 
 
-def test_word_parser_dependency_error_is_lazy() -> None:
+def test_word_parser_dependency_error_is_lazy(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     from Capabilities.rag import WordParser
 
+    real_import = builtins.__import__
+
+    def guarded_import(name, *args, **kwargs):
+        if name == "docx":
+            raise ImportError("missing python-docx")
+        return real_import(name, *args, **kwargs)
+
+    monkeypatch.setattr(builtins, "__import__", guarded_import)
     with pytest.raises(ImportError, match="python-docx"):
         asyncio.run(WordParser().parse(b"not-docx", "bad.docx"))
 

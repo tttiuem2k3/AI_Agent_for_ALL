@@ -26,6 +26,14 @@ docker --version
 git --version
 ```
 
+### Yêu cầu bổ sung cho document conversion
+
+Nếu cài `--all-extras`, cần thêm Rust stable >=1.88 và Visual Studio 2022 C++
+x64 toolset + Windows SDK. `pyproject.toml` hiện yêu cầu `uv >=0.12.4,<0.13`.
+Môi trường Windows đã kiểm chứng dùng Python 3.12.3, uv 0.12.4, Rust 1.97.1
+và Maturin 1.14.1.
+
+
 ## 2. Cài đặt công cụ
 
 ### Cài uv
@@ -163,6 +171,18 @@ uv build --wheel
 Wheel được tạo trong thư mục `dist`. Các thư mục như `.venv`, `dist`, `build`
 và `*.egg-info` là artifact cục bộ, không nên commit vào Git.
 
+### Lưu ý với document conversion native
+
+`uv build --wheel` chỉ tạo wheel Python chính. Khi phát hành bản có document
+conversion, phải tạo bundle đầy đủ gồm cả native wheel bằng:
+
+```powershell
+.\scripts\build_release.ps1 -Clean
+```
+
+Không copy `_native` hoặc `_vendor` vào wheel `asoft-ai-services`.
+
+
 ## 10. Khởi động lại hằng ngày
 
 Terminal 1 — Redis:
@@ -219,3 +239,77 @@ uv sync --all-extras
 cd E:\Asoft\ASOFT_AI_SERVICES\development\Web_UI_test
 pnpm install
 ```
+
+## 12. Document Conversion Native
+
+Từ phiên bản hiện tại, `uv sync --all-extras` còn build và cài native package
+`asoft-document-conversion-native==0.1.9`. Máy Windows phát triển capability này
+cần thêm:
+
+- `uv >=0.12.4,<0.13`
+- Rust stable >=1.88 qua `rustup`
+- Visual Studio 2022 với C++ x64 toolset và Windows SDK
+- Maturin được cài trong `.venv` thông qua extra `dev`
+
+Môi trường đã kiểm chứng ngày 14/08/2026 dùng Python 3.12.3, `uv 0.12.4`,
+Rust 1.97.1 và Maturin 1.14.1.
+
+Cài Rust trên Windows:
+
+```powershell
+winget install --id Rustlang.Rustup -e
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+rustup default stable
+rustup component add rustfmt clippy
+```
+
+Sau khi `uv sync --all-extras`, có thể kích hoạt đúng `.venv` hiện tại bằng:
+
+```powershell
+(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& e:\Asoft\ASOFT_AI_SERVICES\.venv\Scripts\Activate.ps1)
+```
+
+Kiểm tra native runtime:
+
+```powershell
+python -c "import asoft_document_conversion_native; print(asoft_document_conversion_native.__name__)"
+python src\Capabilities\document_conversion\_vendor\verify_source_parity.py
+```
+
+Build và cài riêng native wheel:
+
+```powershell
+.\src\Capabilities\document_conversion\_vendor\build_native.ps1 -Install
+```
+
+Build bundle release gồm cả wheel Python chính và wheel native:
+
+```powershell
+.\scripts\build_release.ps1 -Clean
+```
+
+Chi tiết xem [Document Conversion Native Runtime](document_conversion_native.md).
+
+### uv báo lockfile version không hỗ trợ
+
+Không sửa `uv.lock` bằng tay. Cài đúng `uv` trong range được khai báo tại
+`tool.uv.required-version`, sau đó chạy:
+
+```powershell
+uv lock
+uv sync --all-extras
+```
+
+### Không tìm thấy cargo hoặc rustc
+
+```powershell
+$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+rustup default stable
+cargo --version
+rustc --version
+```
+
+### Không tìm thấy MSVC linker
+
+Cài Visual Studio 2022 C++ x64 toolset và Windows SDK. Script
+`build_native.ps1` tự tìm Visual Studio qua `vswhere` và nạp `vcvars64.bat`.

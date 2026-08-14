@@ -435,8 +435,13 @@ Chứa:
 
 ```text
 Capabilities/
+├── document_conversion/
+│   ├── _native/
+│   │   └── binding/
+│   └── _vendor/
 ├── mcp/
 ├── permission/
+├── rag/
 ├── skill/
 ├── tool/
 │   ├── _builtin/
@@ -506,6 +511,36 @@ Workspace cung cấp filesystem và execution boundary cho Agent.
 | `_gateway_client.py` | Client giao tiếp gateway |
 | `_offload_protocol.py` | Contract offload dữ liệu/file lớn |
 | `_utils.py` | Tìm project root và đóng gói source cho sandbox |
+
+### 9.6 `document_conversion`
+
+Capability chuyển đổi tài liệu dùng chung nằm tại
+`src/Capabilities/document_conversion`. Public Python API không phụ thuộc trực
+tiếp vào tên crate/native package và chỉ load native backend khi thực sự convert.
+
+```text
+document_conversion/
+├── _base.py
+├── _backend.py
+├── _errors.py
+├── _models.py
+├── _service.py
+├── _structure.py
+├── _native/
+│   └── binding/
+└── _vendor/
+```
+
+`_native` là Rust workspace đã làm phẳng từ maintained fork. `_vendor` quản lý
+sync, parity, SHA-256 manifest, upstream metadata, license và native build.
+Application code không import `_native` trực tiếp.
+
+### 9.7 `rag`
+
+`Capabilities.rag` giữ các parser/vector-store contract dùng chung.
+`DocumentConversionParser` chuyển Markdown từ `DocumentConversionService` thành
+RAG `Section`, trong khi `WordParser` và `ExcelParser` cũ vẫn giữ API tương thích.
+
 
 ## 10. `Runtime` — lõi thực thi Agent `[MAIN]`
 
@@ -1200,3 +1235,45 @@ Luồng production bắt đầu tại `service/main.py`, đi vào `Service`, l�
 `Runtime.Agent`, sử dụng `Providers` và `Capabilities`, rồi
 lưu trạng thái qua storage. Toàn bộ `development` nằm ngoài luồng production
 và chỉ phục vụ giao diện phát triển, test, demo và tooling.
+
+## 25. Document conversion native và ASOFT integration
+
+Luồng phụ thuộc mới được chuẩn hóa như sau:
+
+```text
+ASOFT.knowledge_factory          Capabilities.rag
+          \                         /
+           \                       /
+            → Capabilities.document_conversion
+                         ↓
+              NativeDocumentConversionBackend
+                         ↓
+             asoft_document_conversion_native
+                         ↓
+              Rust conversion engine
+```
+
+`Capabilities.document_conversion` chỉ chứa logic generic. Business rule ERPX
+và Knowledge Factory nằm dưới `src/ASOFT`. Cách tách này giữ capability dùng lại
+được cho RAG, API hoặc workflow khác mà không kéo theo rule nghiệp vụ ASOFT.
+
+### 25.1 Dependency và build
+
+Trong source checkout, `pyproject.toml` khai báo extra `document-conversion` và
+`tool.uv.sources` trỏ native package về `_native/binding`. Vì vậy
+`uv sync --all-extras` tự build native extension bằng Maturin.
+
+Release không đóng Rust source vào wheel Python chính. `scripts/build_release.ps1`
+tạo hai artifact riêng trong `dist/`: wheel `asoft-ai-services` thuần Python và
+wheel `asoft-document-conversion-native` theo platform/ABI.
+
+`uv.lock` là lock dependency chính. `requirements.txt` chỉ là bản export phục vụ
+source checkout và chứa native binding ở dạng relative path.
+
+### 25.2 Validation boundary
+
+Native source phải vượt qua parity verifier, Cargo check/test/clippy và native
+fixture tests. Python regression hiện kiểm tra cả public capability, RAG adapter,
+Knowledge Factory adapter và conversion thực tế trên các họ tài liệu chính.
+
+Chi tiết vận hành xem [Document Conversion Native Runtime](document_conversion_native.md).

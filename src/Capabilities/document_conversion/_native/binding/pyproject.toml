@@ -1,0 +1,22 @@
+[build-system]
+requires = ["maturin>=1.9,<2"]
+build-backend = "maturin"
+
+[project]
+name = "asoft-document-conversion-native"
+description = "Convert documents (doc, docx, odt, rtf, epub, pdf, presentations, spreadsheets, csv) to GitHub-Flavored Markdown"
+license = "MIT"
+requires-python = ">=3.10"
+keywords = ["markdown", "docx", "pdf", "pptx", "xlsx", "epub", "converter", "document"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Rust",
+    "Topic :: Text Processing :: Markup :: Markdown",
+    "Typing :: Typed",
+]
+# The version comes from Cargo.toml `package.version`.
+dynamic = ["version"]
+
+[tool.maturin]
+module-name = "asoft_document_conversion_native._native"

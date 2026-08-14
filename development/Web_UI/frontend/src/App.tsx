@@ -1,4 +1,4 @@
-import { Onborda, OnbordaProvider } from 'onborda';
+﻿import { Onborda, OnbordaProvider } from 'onborda';
 import { useMemo, useState } from 'react';
 import { createBrowserRouter, Navigate, RouterProvider, useNavigate } from 'react-router-dom';
 import { Toaster } from 'sonner';
@@ -10,6 +10,7 @@ import { TourCard } from '@/components/tour/TourCard';
 import { useTranslation } from '@/i18n/useI18n';
 import { ChatPage } from '@/pages/chat';
 import { CredentialPage } from '@/pages/credential';
+import { DocumentConversionPage } from '@/pages/document-conversion';
 import { SchedulePage } from '@/pages/schedule';
 import { SetupPage } from '@/pages/setup';
 
@@ -44,6 +45,7 @@ const router = createBrowserRouter([
 					},
 					{ path: '/schedule', element: <SchedulePage /> },
 					{ path: '/credential', element: <CredentialPage /> },
+					{ path: '/document-conversion', element: <DocumentConversionPage /> },
 				],
 			},
 		],

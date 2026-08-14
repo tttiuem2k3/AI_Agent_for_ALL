@@ -1,0 +1,52 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<knowledgeFactoryRagSettings>
+  <!-- Phiên bản bộ cấu hình RAG đang dùng để tạo dữ liệu vector. -->
+  <index version="rag.v1">
+    <!-- Bộ đếm token dùng khi chia nội dung thành chunk. -->
+    <tokenizer id="cl100k_base" provider="tiktoken" />
+
+    <!-- Cách chia nội dung: ưu tiên giữ từng Object tri thức thành các đoạn dễ tìm kiếm. -->
+    <chunking strategy="object-aware">
+      <!-- Số token tối đa trong một chunk. -->
+      <maxTokens>700</maxTokens>
+      <!-- Số token lặp lại giữa hai chunk liền kề để không mất ngữ cảnh. -->
+      <overlapTokens>80</overlapTokens>
+    </chunking>
+
+    <!-- Model dùng để chuyển chunk văn bản thành vector. -->
+    <embedding provider="openai_credential">
+      <!-- Tên embedding model. -->
+      <model>text-embedding-3-small</model>
+      <!-- Số chiều vector; phải khớp với cột ONT2220.Embedding. -->
+      <dimensions>1536</dimensions>
+    </embedding>
+
+    <!-- Phiên bản template Markdown dùng để chuẩn hóa tri thức trước khi chunking. -->
+    <markdownTemplate version="md.v1" />
+
+    <!-- Nơi lưu chunk và vector sau khi embedding. -->
+    <vectorStore provider="sqlserver" table="ONT2220" column="Embedding" />
+  </index>
+
+  <!-- Danh sách biến môi trường tương ứng nếu muốn đưa cấu hình này vào AsoftAiService.xml. -->
+  <environmentVariables>
+    <!-- C?ng t?c Knowledge Factory: m?c ??nh h? th?ng t? b?t. Ch? ??t false khi c?n t?m d?ng x? l? publish. -->
+    <env name="ASOFT_AI_KF_ENABLED" value="true" />
+    <!-- Phiên bản cấu hình RAG dùng cho job indexing. -->
+    <env name="ASOFT_AI_KF_INDEX_VERSION" value="rag.v1" />
+    <!-- Tokenizer dùng để đếm token khi chunking. -->
+    <env name="ASOFT_AI_KF_TOKENIZER" value="cl100k_base" />
+    <!-- Số token tối đa trong một chunk. -->
+    <env name="ASOFT_AI_KF_CHUNK_MAX_TOKENS" value="700" />
+    <!-- Số token overlap giữa các chunk. -->
+    <env name="ASOFT_AI_KF_CHUNK_OVERLAP_TOKENS" value="80" />
+    <!-- Nhà cung cấp embedding model. -->
+    <env name="ASOFT_AI_KF_EMBEDDING_PROVIDER" value="openai_credential" />
+    <!-- Tên embedding model dùng để tạo vector. -->
+    <env name="ASOFT_AI_KF_EMBEDDING_MODEL" value="text-embedding-3-small" />
+    <!-- Số chiều vector embedding. -->
+    <env name="ASOFT_AI_KF_EMBEDDING_DIMENSIONS" value="1536" />
+    <!-- Phiên bản template Markdown chuẩn hóa tri thức. -->
+    <env name="ASOFT_AI_KF_MARKDOWN_TEMPLATE_VERSION" value="md.v1" />
+  </environmentVariables>
+</knowledgeFactoryRagSettings>

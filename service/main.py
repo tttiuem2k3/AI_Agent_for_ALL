@@ -1,9 +1,11 @@
 # -*- coding: utf-8 -*-
 """Standalone ASOFT AI Services host for ERPX integration."""
 
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
 import os
 from pathlib import Path
+import xml.etree.ElementTree as ET
 
 from fastapi import HTTPException
 import uvicorn
@@ -15,6 +17,10 @@ from Service.app._service._erpx_services_config import (
 )
 from Service.app.storage import RedisStorage
 from Service.app.workspace_manager import LocalWorkspaceManager
+from ASOFT.knowledge_factory import (
+    KnowledgeFactoryRuntime,
+    create_knowledge_factory_router,
+)
 
 
 def _env_int(name: str, default: int, *, minimum: int = 0) -> int:
@@ -40,6 +46,29 @@ def _env_bool(name: str, default: bool = False) -> bool:
     if normalized in {"0", "false", "no", "off"}:
         return False
     raise RuntimeError(f"{name} must be true or false.")
+
+def _load_xml_env_defaults() -> None:
+    settings_dir = Path(__file__).resolve().parent / "settings"
+    protected_names = set(os.environ)
+    files = (
+        ("AsoftAiService.xml", False),
+        ("KnowledgeFactoryRagSettings.xml", False),
+        ("AsoftAiService.local.xml", True),
+        ("KnowledgeFactoryRagSettings.local.xml", True),
+    )
+    for filename, override in files:
+        path = settings_dir / filename
+        if not path.exists():
+            continue
+        root = ET.fromstring(path.read_text(encoding="utf-8-sig"))
+        for item in root.findall(".//env"):
+            name = item.attrib.get("name")
+            if not name or name in protected_names:
+                continue
+            if override or name not in os.environ:
+                os.environ[name] = item.attrib.get("value", "")
+
+_load_xml_env_defaults()
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,6 +174,19 @@ app = create_app(
     workspace_manager=LocalWorkspaceManager(str(settings.workspace_dir)),
     extra_agent_tools=ERPXToolFactory(storage, tool_gateway_client),
 )
+knowledge_factory_runtime = KnowledgeFactoryRuntime.from_env()
+app.state.knowledge_factory_runtime = knowledge_factory_runtime
+app.include_router(create_knowledge_factory_router(knowledge_factory_runtime))
+
+_base_lifespan_context = app.router.lifespan_context
+
+@asynccontextmanager
+async def _lifespan_with_knowledge_factory(app):
+    async with _base_lifespan_context(app):
+        async with knowledge_factory_runtime:
+            yield
+
+app.router.lifespan_context = _lifespan_with_knowledge_factory
 
 
 @app.get("/health/live", tags=["Health"])

@@ -1,0 +1,18 @@
+{
+  "rustCrate": {
+    "source": "anydoc",
+    "target": "asoft_document_conversion_engine"
+  },
+  "pythonDistribution": {
+    "source": "firecrawl-anydoc",
+    "target": "asoft-document-conversion-native"
+  },
+  "pythonPackage": {
+    "source": "anydoc",
+    "target": "asoft_document_conversion_native"
+  },
+  "nativeModule": {
+    "source": "_anydoc",
+    "target": "_native"
+  }
+}
