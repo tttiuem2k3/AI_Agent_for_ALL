@@ -24,6 +24,14 @@ class SnapshotIndexRecord(BaseModel):
     asset_apk: str
     asset_title: str
     snapshot_version_no: int
+    asset_id: str | None = None
+    asset_summary: str | None = None
+    primary_domain_apk: str | None = None
+    type_apk: str | None = None
+    department_id: str | None = None
+    module_id: str | None = None
+    screen_id: str | None = None
+    tag_apks: list[str] = Field(default_factory=list)
     snapshot_status_id: str
     normalized_file_apk: str | None = None
     content_hash: str | None = None
@@ -53,6 +61,7 @@ class ActiveRelationRecord(BaseModel):
     source_object_apk: str
     target_object_apk: str | None = None
     target_asset_apk: str | None = None
+    target_asset_title: str | None = None
     target_object_key: str | None = None
     relation_type_id: str
     description: str | None = None
@@ -65,6 +74,15 @@ class KnowledgeDocument(BaseModel):
     division_id: str
     asset_title: str
     snapshot_version_no: int
+    asset_apk: str = ""
+    asset_id: str | None = None
+    asset_summary: str | None = None
+    primary_domain_apk: str | None = None
+    type_apk: str | None = None
+    department_id: str | None = None
+    module_id: str | None = None
+    screen_id: str | None = None
+    tag_apks: list[str] = Field(default_factory=list)
     approved_content_hash: str | None = None
     objects: list[KnowledgeObjectRecord]
     relations: list[ActiveRelationRecord]
@@ -72,7 +90,7 @@ class KnowledgeDocument(BaseModel):
 
 class KnowledgeChunk(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    object_apk: str
+    object_apk: str | None = None
     chunk_index: int
     chunk_text: str
     token_count: int
@@ -80,6 +98,21 @@ class KnowledgeChunk(BaseModel):
     section_path: str
     source_locator_json: dict[str, Any] = Field(default_factory=dict)
 
+
+class SourceDocumentRecord(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    file_apk: str
+    source_ordinal: int
+    source_file_name: str
+    mime_type: str | None = None
+    source_content_hash: str | None = None
+
+class ConvertedSourceMarkdown(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    source: SourceDocumentRecord
+    markdown: str
+    format: str
+    warnings: list[str] = Field(default_factory=list)
 
 class NormalizedMarkdownFile(BaseModel):
     model_config = ConfigDict(extra="forbid")

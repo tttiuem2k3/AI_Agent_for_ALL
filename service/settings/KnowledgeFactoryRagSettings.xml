@@ -33,13 +33,13 @@
     <!-- C?ng t?c Knowledge Factory: m?c ??nh h? th?ng t? b?t. Ch? ??t false khi c?n t?m d?ng x? l? publish. -->
     <env name="ASOFT_AI_KF_ENABLED" value="true" />
     <!-- Phiên bản cấu hình RAG dùng cho job indexing. -->
-    <env name="ASOFT_AI_KF_INDEX_VERSION" value="rag.v1" />
+    <env name="ASOFT_AI_KF_INDEX_VERSION" value="rag.v2" />
     <!-- Tokenizer dùng để đếm token khi chunking. -->
     <env name="ASOFT_AI_KF_TOKENIZER" value="cl100k_base" />
     <!-- Số token tối đa trong một chunk. -->
-    <env name="ASOFT_AI_KF_CHUNK_MAX_TOKENS" value="700" />
+    <env name="ASOFT_AI_KF_CHUNK_MAX_TOKENS" value="800" />
     <!-- Số token overlap giữa các chunk. -->
-    <env name="ASOFT_AI_KF_CHUNK_OVERLAP_TOKENS" value="80" />
+    <env name="ASOFT_AI_KF_CHUNK_OVERLAP_TOKENS" value="100" />
     <!-- Nhà cung cấp embedding model. -->
     <env name="ASOFT_AI_KF_EMBEDDING_PROVIDER" value="openai_credential" />
     <!-- Tên embedding model dùng để tạo vector. -->

@@ -31,10 +31,11 @@ ERPX publish signal
     -> load Approved/Published ONT2101 snapshot
     -> load active ONT2102 objects
     -> load Active ONT2103 relations
+    -> load ONT2105 source files and convert them to Markdown when present
     -> KnowledgeDocumentBuilder
-    -> MarkdownRenderer
-    -> ObjectChunker
-    -> embedding model
+    -> MarkdownRenderer creates one complete snapshot Markdown file
+    -> MarkdownChunker splits that complete Markdown by token size
+    -> embedding model embeds each Markdown chunk
     -> write canonical Markdown file
     -> commit CRMT00002 + ONT2220 vectors + ONT2101 activation + ONT2210 success
 ```
@@ -67,8 +68,8 @@ Main responsibilities:
 - `_api.py`: server-to-server publish trigger.
 - `_repository.py`: SQL Server job/schema/input/commit contract.
 - `_worker.py`: polling, lease, canonical document build, chunking, embedding, commit.
-- `_document.py`: `ONT2102 + ONT2103 -> KnowledgeDocument -> canonical Markdown`.
-- `_chunking.py`: object-aware chunks.
+- `_document.py`: snapshot metadata + `ONT2102` + `ONT2103` + converted source Markdown -> one complete canonical Markdown file.
+- `_chunking.py`: token-window chunks over the complete canonical Markdown file.
 - `_embedding.py`: embedding provider composition.
 - `_storage.py`: deterministic Markdown file persistence.
 - `_vector.py`: SQL Server vector encoding/validation.
@@ -97,8 +98,8 @@ Created from approved semantic records by:
 knowledge_factory._document.MarkdownRenderer
 ```
 
-This is the Markdown currently used for indexing and publishing. The new document
-conversion capability does not replace this renderer.
+This is the Markdown used for indexing and publishing. If source files exist in
+`ONT2105`, their converted Markdown is appended as the final section before chunking.
 
 ## Generic document conversion dependency
 
@@ -119,7 +120,7 @@ models, table names, SnapshotAPK, approval status, or indexing-job logic.
 - Active knowledge objects come from `ONT2102` where `IsArchived = 0`.
 - Relations used in canonical Markdown come from `ONT2103` where `RelationStatusID = 'Active'`.
 - `ONT2210` is the durable Knowledge Factory indexing job/lease table.
-- `ONT2220` stores object chunks and SQL Server vector embeddings.
+- `ONT2220` stores chunks produced from the complete snapshot Markdown and SQL Server vector embeddings.
 - Canonical Markdown is registered in `CRMT00002` as an active knowledge document.
 - Worker progress/commit is lease-owned; losing the lease must prevent activation.
 - Input manifest/hash is recomputed before final activation to prevent stale indexing.

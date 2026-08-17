@@ -68,7 +68,7 @@ class KnowledgeFactorySettings:
             ollama_host=os.getenv("ASOFT_AI_KF_OLLAMA_HOST") or None,
             chunk_max_tokens=_int("ASOFT_AI_KF_CHUNK_MAX_TOKENS", 700, 50),
             chunk_overlap_tokens=_int("ASOFT_AI_KF_CHUNK_OVERLAP_TOKENS", 80, 0),
-            index_version=os.getenv("ASOFT_AI_KF_INDEX_VERSION", "rag.v1").strip(),
+            index_version=os.getenv("ASOFT_AI_KF_INDEX_VERSION", "rag.v2").strip(),
             poll_interval_seconds=_float("ASOFT_AI_KF_POLL_SECONDS", 2.0),
             lease_seconds=_int("ASOFT_AI_KF_LEASE_SECONDS", 120, 15),
             max_concurrency=_int("ASOFT_AI_KF_MAX_CONCURRENCY", 2),

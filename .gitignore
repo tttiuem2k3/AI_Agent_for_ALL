@@ -13,3 +13,5 @@ dist/
 build/
 *.egg-info/
 scripts/
+
+src/ASOFT/knowledge_factory/log.txt

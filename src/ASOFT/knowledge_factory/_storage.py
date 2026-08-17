@@ -9,7 +9,7 @@ from pathlib import Path
 import uuid
 
 from ._errors import KnowledgeFactoryError
-from ._models import IndexJobRecord, NormalizedMarkdownFile
+from ._models import IndexJobRecord, NormalizedMarkdownFile, SourceDocumentRecord
 
 
 class KnowledgeFactoryStorage:
@@ -53,6 +53,23 @@ class KnowledgeFactoryStorage:
             attach_name=f"knowledge-{job.snapshot_apk}.md",
             file_size=len(data),
             content_hash=content_hash,
+        )
+
+    async def read_source_document(self, source: SourceDocumentRecord) -> bytes:
+        root = await self.root()
+        suffix = Path(source.source_file_name).suffix
+        candidates = [
+            root / f"{source.file_apk}{suffix}",
+            root / f"{source.file_apk.lower()}{suffix.lower()}",
+            root / str(source.file_apk),
+            root / source.source_file_name,
+        ]
+        for path in candidates:
+            if path.exists():
+                return await asyncio.to_thread(path.read_bytes)
+        raise KnowledgeFactoryError(
+            "SOURCE_DOCUMENT_NOT_FOUND",
+            f"Source document was not found: {source.source_file_name}",
         )
 
     async def delete(self, file: NormalizedMarkdownFile) -> None:

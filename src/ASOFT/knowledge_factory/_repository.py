@@ -9,7 +9,7 @@ import uuid
 from typing import Any
 
 from ._errors import KnowledgeFactoryError, LeaseLostError
-from ._models import ActiveRelationRecord, IndexJobRecord, IndexJobStatus, KnowledgeChunk, KnowledgeObjectRecord, NormalizedMarkdownFile, PublishResponse, SnapshotIndexRecord
+from ._models import ActiveRelationRecord, IndexJobRecord, IndexJobStatus, KnowledgeChunk, KnowledgeObjectRecord, NormalizedMarkdownFile, PublishResponse, SnapshotIndexRecord, SourceDocumentRecord
 from ._sql import normalize_odbc_connection_string
 from ._vector import SQLServerVectorCodec
 
@@ -88,7 +88,9 @@ class KnowledgeFactoryRepository:
                         DivisionID varchar(50) NOT NULL,
                         JobAPK uniqueidentifier NOT NULL,
                         SnapshotAPK uniqueidentifier NOT NULL,
-                        ObjectAPK uniqueidentifier NOT NULL,
+                        ObjectAPK uniqueidentifier NULL,
+                        ChunkSourceType varchar(30) NOT NULL CONSTRAINT DF_ONT2220_ChunkSourceType DEFAULT 'SNAPSHOT_MARKDOWN',
+                        SourceFileAPK uniqueidentifier NULL,
                         ChunkIndex int NOT NULL,
                         LookupKey nvarchar(450) NULL,
                         ChunkText nvarchar(max) NOT NULL,
@@ -105,6 +107,22 @@ class KnowledgeFactoryRepository:
                 END;
                 """,
             )
+            cursor.execute("""
+                IF OBJECT_ID('dbo.ONT2220', 'U') IS NOT NULL
+                BEGIN
+                    IF COL_LENGTH('dbo.ONT2220', 'ChunkSourceType') IS NULL
+                        ALTER TABLE dbo.ONT2220 ADD ChunkSourceType varchar(30) NOT NULL CONSTRAINT DF_ONT2220_ChunkSourceType DEFAULT 'SNAPSHOT_MARKDOWN';
+                    IF COL_LENGTH('dbo.ONT2220', 'SourceFileAPK') IS NULL
+                        ALTER TABLE dbo.ONT2220 ADD SourceFileAPK uniqueidentifier NULL;
+                    IF EXISTS (
+                        SELECT 1 FROM sys.columns
+                        WHERE object_id = OBJECT_ID('dbo.ONT2220')
+                          AND name = 'ObjectAPK'
+                          AND is_nullable = 0
+                    )
+                        ALTER TABLE dbo.ONT2220 ALTER COLUMN ObjectAPK uniqueidentifier NULL;
+                END;
+            """)
             connection.commit()
         except Exception:
             connection.rollback()
@@ -118,7 +136,7 @@ class KnowledgeFactoryRepository:
     def _validate_schema_contract_sync(self, dimensions: int) -> None:
         required = {
             "ONT2210": {"APK", "DivisionID", "SnapshotAPK", "NormalizedFileAPK", "ApprovedContentHash", "InputManifestHash", "IndexVersion", "JobStatusID", "ProgressPercent", "RetryCount", "IndexedObjectCount", "ChunkCount", "TokenCount", "LeaseOwner", "LeaseExpiresDate"},
-            "ONT2220": {"ChunkID", "APK", "DivisionID", "JobAPK", "SnapshotAPK", "ObjectAPK", "ChunkIndex", "ChunkText", "TokenCount", "ContentHash", "Embedding", "SectionPath", "SourceLocatorJson"},
+            "ONT2220": {"ChunkID", "APK", "DivisionID", "JobAPK", "SnapshotAPK", "ObjectAPK", "ChunkSourceType", "SourceFileAPK", "ChunkIndex", "ChunkText", "TokenCount", "ContentHash", "Embedding", "SectionPath", "SourceLocatorJson"},
         }
         connection = self._connect()
         try:
@@ -175,13 +193,30 @@ class KnowledgeFactoryRepository:
             manifest_hash = self._compute_input_manifest_hash(cursor, snapshot)
             approved_hash = snapshot.approved_content_hash or manifest_hash
             cursor.execute("""
-                SELECT TOP (1) APK, JobStatusID FROM dbo.ONT2210 WITH (UPDLOCK, HOLDLOCK)
+                SELECT TOP (1) APK, JobStatusID, InputManifestHash, IndexVersion
+                FROM dbo.ONT2210 WITH (UPDLOCK, HOLDLOCK)
                 WHERE DivisionID = ? AND SnapshotAPK = ?;
             """, snapshot.division_id, snapshot.apk)
             rows = self._rows(cursor)
             if rows:
                 job_apk = str(rows[0]["APK"])
                 status = IndexJobStatus(str(rows[0]["JobStatusID"]))
+                input_changed = str(rows[0]["InputManifestHash"]) != manifest_hash
+                version_changed = str(rows[0]["IndexVersion"]) != index_version
+                retryable = status in {IndexJobStatus.FAILED, IndexJobStatus.CANCELLED}
+                if status != IndexJobStatus.PROCESSING and (input_changed or version_changed or retryable):
+                    cursor.execute("""
+                        UPDATE dbo.ONT2210 SET
+                            ApprovedContentHash = ?, InputManifestHash = ?, IndexVersion = ?,
+                            JobStatusID = 'Queued', ProgressPercent = 0, RetryCount = 0,
+                            IndexedObjectCount = 0, ChunkCount = 0, TokenCount = 0,
+                            LastErrorCode = NULL, LastErrorMessage = NULL,
+                            StartedDate = NULL, CompletedDate = NULL,
+                            LeaseOwner = NULL, LeaseExpiresDate = NULL,
+                            LastModifyUserID = 'KM_FACTORY', LastModifyDate = SYSUTCDATETIME()
+                        WHERE APK = ? AND DivisionID = ? AND SnapshotAPK = ?;
+                    """, approved_hash, manifest_hash, index_version, job_apk, snapshot.division_id, snapshot.apk)
+                    status = IndexJobStatus.QUEUED
             else:
                 job_apk = str(uuid.uuid4()).upper()
                 cursor.execute("""
@@ -192,7 +227,14 @@ class KnowledgeFactoryRepository:
                 """, job_apk, snapshot.division_id, snapshot.apk, snapshot.normalized_file_apk, approved_hash, manifest_hash, index_version)
                 status = IndexJobStatus.QUEUED
             connection.commit()
-            return PublishResponse(snapshot_apk=snapshot.apk, job_apk=job_apk, status=status, detail="Knowledge Factory indexing job is queued.")
+            details = {
+                IndexJobStatus.QUEUED: "Knowledge Factory indexing job is queued.",
+                IndexJobStatus.PROCESSING: "Knowledge Factory indexing job is processing.",
+                IndexJobStatus.SUCCEEDED: "Knowledge Factory indexing job already succeeded.",
+                IndexJobStatus.FAILED: "Knowledge Factory indexing job failed.",
+                IndexJobStatus.CANCELLED: "Knowledge Factory indexing job was cancelled.",
+            }
+            return PublishResponse(snapshot_apk=snapshot.apk, job_apk=job_apk, status=status, detail=details[status])
         except Exception:
             connection.rollback()
             raise
@@ -233,6 +275,34 @@ class KnowledgeFactoryRepository:
 
     async def load_index_input(self, job: IndexJobRecord) -> tuple[SnapshotIndexRecord, list[KnowledgeObjectRecord], list[ActiveRelationRecord]]:
         return await asyncio.to_thread(self._load_index_input_sync, job)
+
+    async def load_source_documents(self, job: IndexJobRecord) -> list[SourceDocumentRecord]:
+        return await asyncio.to_thread(self._load_source_documents_sync, job)
+
+    def _load_source_documents_sync(self, job: IndexJobRecord) -> list[SourceDocumentRecord]:
+        connection = self._connect()
+        try:
+            return self._load_source_documents(connection.cursor(), job)
+        finally:
+            connection.close()
+
+    def _load_source_documents(self, cursor, job: IndexJobRecord) -> list[SourceDocumentRecord]:
+        cursor.execute("""
+            SELECT FileAPK, SourceOrdinal, SourceFileName, MimeType, SourceContentHash
+            FROM dbo.ONT2105
+            WHERE SnapshotAPK = ?
+            ORDER BY SourceOrdinal, FileAPK;
+        """, job.snapshot_apk)
+        return [
+            SourceDocumentRecord(
+                file_apk=str(row["FileAPK"]),
+                source_ordinal=int(row["SourceOrdinal"]),
+                source_file_name=str(row["SourceFileName"]),
+                mime_type=str(row["MimeType"]) if row["MimeType"] else None,
+                source_content_hash=str(row["SourceContentHash"]) if row["SourceContentHash"] else None,
+            )
+            for row in self._rows(cursor)
+        ]
 
     def _load_index_input_sync(self, job: IndexJobRecord):
         connection = self._connect()
@@ -350,10 +420,10 @@ class KnowledgeFactoryRepository:
                 cursor.execute(
                     f"""
                     INSERT INTO dbo.ONT2220
-                    (APK, DivisionID, JobAPK, SnapshotAPK, ObjectAPK, ChunkIndex,
+                    (APK, DivisionID, JobAPK, SnapshotAPK, ObjectAPK, ChunkSourceType, SourceFileAPK, ChunkIndex,
                      LookupKey, ChunkText, TokenCount, ContentHash, Embedding,
                      SectionPath, SourceLocatorJson, CreateDate)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
                             CAST(CAST(? AS varchar(max)) AS vector({dimensions})), ?, ?, SYSUTCDATETIME());
                     """,
                     str(uuid.uuid4()).upper(),
@@ -361,8 +431,10 @@ class KnowledgeFactoryRepository:
                     job.apk,
                     job.snapshot_apk,
                     chunk.object_apk,
+                    chunk.source_locator_json.get("source_type", "SNAPSHOT_MARKDOWN"),
+                    chunk.source_locator_json.get("source_file_apk"),
                     chunk.chunk_index,
-                    f"{job.snapshot_apk}:{chunk.object_apk}:{chunk.chunk_index}",
+                    f"{job.snapshot_apk}:{chunk.source_locator_json.get('source_type', 'SNAPSHOT_MARKDOWN')}:{chunk.chunk_index}",
                     chunk.chunk_text,
                     chunk.token_count,
                     chunk.content_hash,
@@ -374,7 +446,7 @@ class KnowledgeFactoryRepository:
                         sort_keys=True,
                     ),
                 )
-            object_count = len({chunk.object_apk for chunk in chunks})
+            object_count = len(self._load_objects(cursor, job))
             token_count = sum(chunk.token_count for chunk in chunks)
             cursor.execute(
                 """
@@ -449,8 +521,10 @@ class KnowledgeFactoryRepository:
 
     def _get_snapshot(self, cursor, snapshot_apk: str) -> SnapshotIndexRecord:
         cursor.execute("""
-            SELECT TOP (2) s.APK, s.DivisionID, s.APKMaster AS AssetAPK, a.Title AS AssetTitle, s.VersionNo AS SnapshotVersionNo,
-                   s.SnapshotStatusID, s.NormalizedFileAPK, s.ContentHash, s.ApprovedContentHash, s.SuccessfulJobAPK, s.IndexVersion
+            SELECT TOP (2) s.APK, s.DivisionID, s.APKMaster AS AssetAPK, a.AssetID, a.Title AS AssetTitle,
+                   a.Summary AS AssetSummary, a.PrimaryDomainAPK, a.TypeAPK, a.DepartmentID, a.ModuleID, a.ScreenID,
+                   s.VersionNo AS SnapshotVersionNo, s.SnapshotStatusID, s.NormalizedFileAPK, s.ContentHash,
+                   s.ApprovedContentHash, s.SuccessfulJobAPK, s.IndexVersion
             FROM dbo.ONT2101 s INNER JOIN dbo.ONT2100 a ON a.APK = s.APKMaster AND a.DivisionID = s.DivisionID
             WHERE s.APK = ?;
         """, snapshot_apk)
@@ -458,7 +532,28 @@ class KnowledgeFactoryRepository:
         if len(rows) != 1:
             raise KnowledgeFactoryError("SNAPSHOT_NOT_FOUND", "Snapshot was not found.")
         row = rows[0]
-        return SnapshotIndexRecord(apk=str(row["APK"]), division_id=str(row["DivisionID"]), asset_apk=str(row["AssetAPK"]), asset_title=str(row["AssetTitle"]), snapshot_version_no=int(row["SnapshotVersionNo"]), snapshot_status_id=str(row["SnapshotStatusID"]), normalized_file_apk=str(row["NormalizedFileAPK"]) if row["NormalizedFileAPK"] else None, content_hash=str(row["ContentHash"]) if row["ContentHash"] else None, approved_content_hash=str(row["ApprovedContentHash"]) if row["ApprovedContentHash"] else None, successful_job_apk=str(row["SuccessfulJobAPK"]) if row["SuccessfulJobAPK"] else None, index_version=str(row["IndexVersion"]) if row["IndexVersion"] else None)
+        tags = self._load_asset_tags(cursor, str(row["AssetAPK"]))
+        return SnapshotIndexRecord(
+            apk=str(row["APK"]), division_id=str(row["DivisionID"]), asset_apk=str(row["AssetAPK"]),
+            asset_id=str(row["AssetID"]) if row["AssetID"] else None, asset_title=str(row["AssetTitle"]),
+            asset_summary=str(row["AssetSummary"]) if row["AssetSummary"] else None,
+            primary_domain_apk=str(row["PrimaryDomainAPK"]) if row["PrimaryDomainAPK"] else None,
+            type_apk=str(row["TypeAPK"]) if row["TypeAPK"] else None, department_id=str(row["DepartmentID"]) if row["DepartmentID"] else None,
+            module_id=str(row["ModuleID"]) if row["ModuleID"] else None, screen_id=str(row["ScreenID"]) if row["ScreenID"] else None,
+            tag_apks=tags, snapshot_version_no=int(row["SnapshotVersionNo"]), snapshot_status_id=str(row["SnapshotStatusID"]),
+            normalized_file_apk=str(row["NormalizedFileAPK"]) if row["NormalizedFileAPK"] else None,
+            content_hash=str(row["ContentHash"]) if row["ContentHash"] else None, approved_content_hash=str(row["ApprovedContentHash"]) if row["ApprovedContentHash"] else None,
+            successful_job_apk=str(row["SuccessfulJobAPK"]) if row["SuccessfulJobAPK"] else None, index_version=str(row["IndexVersion"]) if row["IndexVersion"] else None,
+        )
+
+    def _load_asset_tags(self, cursor, asset_apk: str) -> list[str]:
+        cursor.execute("""
+            SELECT TagAPK
+            FROM dbo.ONT2104
+            WHERE APKMaster = ?
+            ORDER BY CreateDate, TagAPK;
+        """, asset_apk)
+        return [str(row["TagAPK"]) for row in self._rows(cursor)]
 
     def _validate_snapshot_ready(self, snapshot: SnapshotIndexRecord) -> None:
         if snapshot.snapshot_status_id not in {"Approved", "Published"}:
@@ -468,8 +563,15 @@ class KnowledgeFactoryRepository:
 
     def _compute_input_manifest_hash(self, cursor, snapshot: SnapshotIndexRecord) -> str:
         objects = self._load_objects(cursor, IndexJobRecord(apk=str(uuid.uuid4()), division_id=snapshot.division_id, snapshot_apk=snapshot.apk, status=IndexJobStatus.QUEUED, index_version="", approved_content_hash=snapshot.approved_content_hash or "", input_manifest_hash=""))
-        relations = self._load_relations(cursor, IndexJobRecord(apk=str(uuid.uuid4()), division_id=snapshot.division_id, snapshot_apk=snapshot.apk, status=IndexJobStatus.QUEUED, index_version="", approved_content_hash=snapshot.approved_content_hash or "", input_manifest_hash=""))
-        payload = {"snapshot": snapshot.model_dump(), "objects": [item.model_dump() for item in objects], "relations": [item.model_dump() for item in relations]}
+        manifest_job = IndexJobRecord(apk=str(uuid.uuid4()), division_id=snapshot.division_id, snapshot_apk=snapshot.apk, status=IndexJobStatus.QUEUED, index_version="", approved_content_hash=snapshot.approved_content_hash or "", input_manifest_hash="")
+        relations = self._load_relations(cursor, manifest_job)
+        sources = self._load_source_documents(cursor, manifest_job)
+        payload = {
+            "snapshot": snapshot.model_dump(),
+            "objects": [item.model_dump() for item in objects],
+            "relations": [item.model_dump() for item in relations],
+            "source_documents": [item.model_dump() for item in sources],
+        }
         return hashlib.sha256(json.dumps(payload, ensure_ascii=False, sort_keys=True, default=str).encode("utf-8")).hexdigest().upper()
 
     def _load_objects(self, cursor, job: IndexJobRecord) -> list[KnowledgeObjectRecord]:
@@ -486,12 +588,14 @@ class KnowledgeFactoryRepository:
 
     def _load_relations(self, cursor, job: IndexJobRecord) -> list[ActiveRelationRecord]:
         cursor.execute("""
-            SELECT APK, SourceObjectAPK, TargetObjectAPK, TargetAssetAPK, TargetObjectKey, RelationTypeID, Description, ConditionText
-            FROM dbo.ONT2103
-            WHERE DivisionID = ? AND SnapshotAPK = ? AND RelationStatusID = 'Active'
-            ORDER BY RelationTypeID, APK;
+            SELECT r.APK, r.SourceObjectAPK, r.TargetObjectAPK, r.TargetAssetAPK, a.Title AS TargetAssetTitle,
+                   r.TargetObjectKey, r.RelationTypeID, r.Description, r.ConditionText
+            FROM dbo.ONT2103 r
+            LEFT JOIN dbo.ONT2100 a ON a.APK = r.TargetAssetAPK AND a.DivisionID = r.DivisionID
+            WHERE r.DivisionID = ? AND r.SnapshotAPK = ? AND r.RelationStatusID = 'Active'
+            ORDER BY r.RelationTypeID, r.APK;
         """, job.division_id, job.snapshot_apk)
-        return [ActiveRelationRecord(apk=str(row["APK"]), source_object_apk=str(row["SourceObjectAPK"]), target_object_apk=str(row["TargetObjectAPK"]) if row["TargetObjectAPK"] else None, target_asset_apk=str(row["TargetAssetAPK"]) if row["TargetAssetAPK"] else None, target_object_key=str(row["TargetObjectKey"]) if row["TargetObjectKey"] else None, relation_type_id=str(row["RelationTypeID"]), description=str(row["Description"]) if row["Description"] else None, condition_text=str(row["ConditionText"]) if row["ConditionText"] else None) for row in self._rows(cursor)]
+        return [ActiveRelationRecord(apk=str(row["APK"]), source_object_apk=str(row["SourceObjectAPK"]), target_object_apk=str(row["TargetObjectAPK"]) if row["TargetObjectAPK"] else None, target_asset_apk=str(row["TargetAssetAPK"]) if row["TargetAssetAPK"] else None, target_asset_title=str(row["TargetAssetTitle"]) if row.get("TargetAssetTitle") else None, target_object_key=str(row["TargetObjectKey"]) if row["TargetObjectKey"] else None, relation_type_id=str(row["RelationTypeID"]), description=str(row["Description"]) if row["Description"] else None, condition_text=str(row["ConditionText"]) if row["ConditionText"] else None) for row in self._rows(cursor)]
 
     @staticmethod
     def _json(value: Any) -> dict[str, Any]:
