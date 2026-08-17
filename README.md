@@ -1,6 +1,6 @@
-# ASOFT_AI_SERVICES
+# TTT_AI_SERVICES
 
-ASOFT AI Services is the Python AI platform developed by ASOFT for ERPX. It
+TTT AI Services is the Python AI platform developed by TTT for ERPX. It
 provides the agent runtime, model integrations, tools, and service APIs needed
 to add AI capabilities to the ERPX ecosystem.
 
@@ -9,7 +9,7 @@ The source is organized around these main areas:
 - `Runtime`: agents, messages, events, middleware, and runtime state.
 - `Providers`: LLM, embedding, OCR, speech, and credential integrations.
 - `Capabilities`: reusable tools, MCP, permissions, RAG, workspaces, and document conversion.
-- `ASOFT`: ERPX-specific business integrations such as Knowledge Factory.
+- `TTT`: ERPX-specific business integrations such as Knowledge Factory.
 - `Service`: the FastAPI application, storage, scheduling, and Web UI APIs.
 - `Common`: shared types, exceptions, and utilities.
 
@@ -19,7 +19,7 @@ The project requires Python 3.11 or newer. Development uses `uv` 0.12.x;
 ## Purpose
 
 - Provide reusable Python AI services for ERPX applications.
-- Keep model providers and agent capabilities behind stable ASOFT interfaces.
+- Keep model providers and agent capabilities behind stable TTT interfaces.
 - Support multi-tenant, multi-session deployments and ERPX integration.
 - Allow ERPX-specific storage, authentication, tools, and business workflows to
   be added without coupling them to a model provider.
@@ -31,18 +31,18 @@ Visual Studio 2022 C++ x64 toolset. The native document converter uses Rust and
 Maturin; `uv sync --all-extras` builds it automatically from the local source.
 
 ```powershell
-cd E:\Asoft\ASOFT_AI_SERVICES
+cd E:\TTT\TTT_AI_SERVICES
 uv sync --all-extras
-(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& e:\Asoft\ASOFT_AI_SERVICES\.venv\Scripts\Activate.ps1)
+(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& e:\TTT\TTT_AI_SERVICES\.venv\Scripts\Activate.ps1)
 ```
 
-The distribution name is `asoft-ai-services`. It installs the top-level Python
-packages `Common`, `Providers`, `Capabilities`, `Runtime`, `Service`, and `ASOFT`.
+The distribution name is `TTT-ai-services`. It installs the top-level Python
+packages `Common`, `Providers`, `Capabilities`, `Runtime`, `Service`, and `TTT`.
 
 ## Document conversion native runtime
 
 `Capabilities.document_conversion` converts supported office/document formats
-to normalized Markdown through the private `asoft-document-conversion-native`
+to normalized Markdown through the private `TTT-document-conversion-native`
 PyO3 wheel. Application code imports only the capability API, never `_native`
 directly.
 
@@ -62,15 +62,15 @@ To build/install only the native wheel into the active project environment:
 ## Release bundle
 
 The application and native extension are deliberately shipped as two wheels.
-The main `asoft-ai-services` wheel excludes `_native` and `_vendor` source.
+The main `TTT-ai-services` wheel excludes `_native` and `_vendor` source.
 
 ```powershell
 .\scripts\build_release.ps1 -Clean
 .\scripts\install_release.ps1 -Python .\.venv\Scripts\python.exe
 ```
 
-The release bundle contains `asoft_ai_services-*.whl` and the platform-specific
-`asoft_document_conversion_native-*.whl`.
+The release bundle contains `TTT_ai_services-*.whl` and the platform-specific
+`TTT_document_conversion_native-*.whl`.
 
 ## Quick start
 
@@ -137,7 +137,7 @@ Detailed setup and architecture documentation:
 - [Setup guide](docs/huong_dan_cai_dat.md)
 - [Project architecture](docs/kien_truc_du_an.md)
 - [Document conversion native runtime](docs/document_conversion_native.md)
-- [AI Service API and Postman examples](docs/Thong_tin_API_ASOFT_AI_SERVICES.md)
+- [AI Service API and Postman examples](docs/Thong_tin_API_TTT_AI_SERVICES.md)
 
 ## License
 
