@@ -2,6 +2,7 @@
 
 > Nền tảng **AI Agent Service bằng Python** dành cho hệ sinh thái ERPX, cung cấp Agent Runtime, Model Provider, Tool/MCP, Skill, Workspace, RAG và các API tích hợp doanh nghiệp.
 
+<p align="center">\n  <img src="./docs/images/readme_overview.svg" width="100%" alt="ASOFT AI Services – Agent Runtime for ERPX overview">\n</p>\n
 ---
 
 ## 📌 Giới thiệu
