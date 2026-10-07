@@ -1,144 +1,216 @@
-# TTT_AI_SERVICES
+# 🧠 ASOFT AI Services – Agent Runtime for ERPX
 
-TTT AI Services is the Python AI platform developed by TTT for ERPX. It
-provides the agent runtime, model integrations, tools, and service APIs needed
-to add AI capabilities to the ERPX ecosystem.
+> Nền tảng **AI Agent Service bằng Python** dành cho hệ sinh thái ERPX, cung cấp Agent Runtime, Model Provider, Tool/MCP, Skill, Workspace, RAG và các API tích hợp doanh nghiệp.
 
-The source is organized around these main areas:
+---
 
-- `Runtime`: agents, messages, events, middleware, and runtime state.
-- `Providers`: LLM, embedding, OCR, speech, and credential integrations.
-- `Capabilities`: reusable tools, MCP, permissions, RAG, workspaces, and document conversion.
-- `TTT`: ERPX-specific business integrations such as Knowledge Factory.
-- `Service`: the FastAPI application, storage, scheduling, and Web UI APIs.
-- `Common`: shared types, exceptions, and utilities.
+## 📌 Giới thiệu
 
-The project requires Python 3.11 or newer. Development uses `uv` 0.12.x;
-`pyproject.toml` enforces the supported `uv` range.
+AI_Agent_for_ALL là source của **ASOFT AI Services**. Mục tiêu của dự án là đưa các khả năng AI vào ERPX thông qua một lớp service độc lập, có thể mở rộng theo provider, tool và nghiệp vụ mà không khóa hệ thống vào một mô hình duy nhất.
 
-## Purpose
+Dự án hỗ trợ từ chat/stream cơ bản đến các luồng Agent phức tạp có Tool, MCP, Skill, Permission, Workspace, Knowledge Factory và lưu trữ bền vững.
 
-- Provide reusable Python AI services for ERPX applications.
-- Keep model providers and agent capabilities behind stable TTT interfaces.
-- Support multi-tenant, multi-session deployments and ERPX integration.
-- Allow ERPX-specific storage, authentication, tools, and business workflows to
-  be added without coupling them to a model provider.
+---
 
-## Installation
+## 🚀 Chức năng chính
 
-On Windows, install Python 3.11+, `uv` 0.12.x, Git, Rust stable >=1.88, and the
-Visual Studio 2022 C++ x64 toolset. The native document converter uses Rust and
-Maturin; `uv sync --all-extras` builds it automatically from the local source.
+- 🤖 **Agent Runtime**: quản lý Agent, Message, Event, middleware và trạng thái runtime.
+- 💬 **Streaming chat**: trả event theo thời gian thực cho ERPX/Web UI.
+- 🧠 **Model Providers**: lớp tích hợp model text, embedding, OCR, speech và credential.
+- 🛠️ **Tool Runtime**: đăng ký, tìm kiếm và thực thi tool theo user/agent/session.
+- 🔌 **MCP**: kết nối MCP server và đưa MCP tool vào Agent Runtime.
+- 🧩 **Skill Management**: nạp skill và gắn capability theo runtime.
+- 🔐 **Permission & Workspace**: kiểm soát quyền thực thi và workspace của Agent.
+- 📚 **RAG / Knowledge Factory**: chuẩn hóa tài liệu, chunking, embedding và truy xuất knowledge.
+- 📄 **Document Conversion**: chuyển DOC/DOCX/XLS/XLSX/PPT/PPTX/PDF/EPUB/RTF/CSV thành Markdown bằng native Rust/PyO3 runtime.
+- 💾 **Durable Storage**: hỗ trợ Redis và các storage backend mở rộng.
+- 🏢 **ERPX Integration**: workflow và tool chuyên biệt nằm trong lớp ASOFT.
 
-```powershell
-cd E:\TTT\TTT_AI_SERVICES
+---
+
+## 🏗️ Kiến trúc tổng quan
+
+~~~text
+ERPX / Web UI
+     │
+     ▼
+FastAPI Service
+     │
+     ├── Agent Runtime
+     │     ├── Model Provider
+     │     ├── Tool / MCP
+     │     ├── Skill
+     │     ├── Permission
+     │     └── Workspace
+     │
+     ├── RAG / Knowledge
+     ├── Document Conversion
+     ├── Scheduler / Storage
+     └── ASOFT Business Workflows
+             │
+             ▼
+        ERPX / SQL / Services
+~~~
+
+---
+
+## 🧱 Các lớp chính
+
+| Thành phần | Vai trò |
+|---|---|
+| Runtime | Agent, event, message, middleware, runtime state |
+| Providers | LLM, embedding, OCR, speech, credential |
+| Capabilities | Tool, MCP, RAG, Skill, Permission, Workspace, Document Conversion |
+| ASOFT | Workflow nghiệp vụ ERPX, Knowledge Factory |
+| Service | FastAPI app, API, scheduler, storage, Web UI API |
+| Common | Kiểu dữ liệu, exception và utility dùng chung |
+
+---
+
+## 📚 Knowledge Factory
+
+Knowledge Factory xử lý dữ liệu knowledge đã được ERPX duyệt/publish theo luồng:
+
+~~~text
+ERPX Publish
+   ↓
+Indexing Job
+   ↓
+Load Snapshot + Object + Relation + Source File
+   ↓
+Document Conversion
+   ↓
+Canonical Markdown
+   ↓
+Chunking
+   ↓
+Embedding
+   ↓
+Vector + Metadata
+   ↓
+Commit về storage / SQL
+~~~
+
+Mã nguồn nghiệp vụ nằm trong:
+
+~~~text
+src/ASOFT/knowledge_factory/
+~~~
+
+---
+
+## 🛠️ Công nghệ sử dụng
+
+- 🐍 **Python 3.11+**
+- ⚡ **FastAPI**
+- 🔌 **MCP / FastMCP**
+- 🧠 **OpenAI / Ollama và các model provider**
+- 💾 **Redis**
+- 📚 **RAG / Embedding**
+- 🦀 **Rust + PyO3 + Maturin** cho Document Conversion
+- 🌐 **React / TypeScript** cho Web UI development
+- 🔄 **SSE / realtime event streaming**
+- 🗄️ **SQL Server / ERPX integration**
+
+---
+
+## 📂 Cấu trúc dự án
+
+~~~text
+AI_Agent_for_ALL/
+├── src/
+│   ├── Common/
+│   ├── Providers/
+│   ├── Capabilities/
+│   ├── Runtime/
+│   ├── Service/
+│   └── ASOFT/
+├── service/
+│   ├── main.py                  # Standalone FastAPI host
+│   ├── settings/
+│   └── workspaces/
+├── development/
+│   └── Web_UI/                  # Web UI phục vụ DEV/TEST
+├── scripts/
+├── docs/
+├── pyproject.toml
+├── requirements.txt
+└── README.md
+~~~
+
+---
+
+## ⚙️ Cài đặt
+
+### Yêu cầu
+
+- Python 3.11+
+- uv 0.12.x
+- Git
+- Redis nếu chạy durable storage
+- Rust >= 1.88 + Visual Studio C++ Toolset nếu build native Document Conversion
+
+### Đồng bộ dependency
+
+~~~powershell
+git clone https://github.com/tttiuem2k3/AI_Agent_for_ALL.git
+cd AI_Agent_for_ALL
 uv sync --all-extras
-(Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned) ; (& e:\TTT\TTT_AI_SERVICES\.venv\Scripts\Activate.ps1)
-```
+~~~
 
-The distribution name is `TTT-ai-services`. It installs the top-level Python
-packages `Common`, `Providers`, `Capabilities`, `Runtime`, `Service`, and `TTT`.
+### Chạy standalone service
 
-## Document conversion native runtime
-
-`Capabilities.document_conversion` converts supported office/document formats
-to normalized Markdown through the private `TTT-document-conversion-native`
-PyO3 wheel. Application code imports only the capability API, never `_native`
-directly.
-
-To resynchronize the vendored runtime from the maintained clean fork:
-
-```powershell
-.venv\Scripts\python.exe src\Capabilities\document_conversion\_vendor\sync_from_fork.py
-.venv\Scripts\python.exe src\Capabilities\document_conversion\_vendor\verify_source_parity.py
-```
-
-To build/install only the native wheel into the active project environment:
-
-```powershell
-.\src\Capabilities\document_conversion\_vendor\build_native.ps1 -Install
-```
-
-## Release bundle
-
-The application and native extension are deliberately shipped as two wheels.
-The main `TTT-ai-services` wheel excludes `_native` and `_vendor` source.
-
-```powershell
-.\scripts\build_release.ps1 -Clean
-.\scripts\install_release.ps1 -Python .\.venv\Scripts\python.exe
-```
-
-The release bundle contains `TTT_ai_services-*.whl` and the platform-specific
-`TTT_document_conversion_native-*.whl`.
-
-## Quick start
-
-```python
-import asyncio
-import os
-
-from Capabilities.tool import Bash, Edit, Glob, Grep, Read, Toolkit, Write
-from Providers.credential import DashScopeCredential
-from Providers.modelLLM.model import DashScopeChatModel
-from Runtime.agent import Agent
-from Runtime.event import EventType
-from Runtime.message import UserMsg
-
-
-async def main() -> None:
-    agent = Agent(
-        name="Friday",
-        system_prompt="You're a helpful assistant named Friday.",
-        model=DashScopeChatModel(
-            credential=DashScopeCredential(
-                api_key=os.environ["DASHSCOPE_API_KEY"],
-            ),
-            model="qwen3.6-plus",
-        ),
-        toolkit=Toolkit(
-            tools=[Bash(), Grep(), Glob(), Read(), Write(), Edit()],
-        ),
-    )
-
-    async for event in agent.reply_stream(UserMsg("Tony", "Hi, Friday!")):
-        if event.type == EventType.TEXT_BLOCK_DELTA:
-            print(event)
-
-
-asyncio.run(main())
-```
-
-## Agent service
-
-The application under `service` provides a FastAPI-based, multi-tenant and
-multi-session agent service:
-
-```bash
-uv sync --extra service --extra storage --extra models --extra mem0
+~~~powershell
 uv run python service/main.py
-```
+~~~
 
-The backend listens on `http://localhost:8000` by default and requires Redis.
-See [service/README.md](service/README.md) for the complete setup.
+Mặc định service chạy tại:
 
-## Web UI
+~~~text
+http://localhost:8000
+~~~
 
-Run the companion interface in another terminal:
+Health check:
 
-```bash
-cd development/Web_UI_test
+~~~text
+GET /health/live
+GET /health/ready
+~~~
+
+---
+
+## 🖥️ Web UI Development
+
+~~~powershell
+cd development/Web_UI
 pnpm install
 pnpm dev
-```
+~~~
 
-Detailed setup and architecture documentation:
+Web UI dùng để quản lý/test Agent, Credential, Session, Schedule, MCP, Skill, Workspace và luồng SSE.
 
-- [Setup guide](docs/huong_dan_cai_dat.md)
-- [Project architecture](docs/kien_truc_du_an.md)
-- [Document conversion native runtime](docs/document_conversion_native.md)
-- [AI Service API and Postman examples](docs/Thong_tin_API_TTT_AI_SERVICES.md)
+---
 
-## License
+## 📄 Document Conversion
 
-Licensed under the Apache License 2.0.
+Application code chỉ gọi public API của Capabilities.document_conversion.
+
+Native converter được đóng gói bằng Rust/PyO3 và trả tài liệu đã chuẩn hóa về Markdown.
+
+---
+
+## 🔒 Lưu ý cấu hình
+
+- Không commit API key, Redis password hoặc SQL connection string.
+- Credential được inject bằng biến môi trường/process manager.
+- Workspace và dữ liệu runtime nên nằm ngoài source production khi triển khai.
+
+---
+
+## 📞 Liên hệ
+
+- 📧 Email: tttiuem2k3@gmail.com
+- 👥 LinkedIn: [Thịnh Trần](https://www.linkedin.com/in/thinh-tran-04122k3/)
+- 💬 Zalo / Phone: +84 329966939 | +84 336639775
+
+---
